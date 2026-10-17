@@ -35,6 +35,8 @@ class HudView @JvmOverloads constructor(
     lateinit var orientation: OrientationTracker
     var detectorReady = true
     var onGunStateChanged: ((GunState) -> Unit)? = null
+    /** Vista de la cámara: se sacude y desenfoca mientras el cañón dispara. */
+    var cameraView: View? = null
 
     val projector = Projector()
     private val ballistics = Ballistics()
@@ -145,6 +147,7 @@ class HudView @JvmOverloads constructor(
         checkHits(now)
 
         val firing = gun.state == GunState.FIRING
+        applyCameraShake(firing, dt.toFloat())
         canvas.save()
         if (firing) canvas.translate((rnd.nextFloat() - 0.5f) * 3f * dp, (rnd.nextFloat() - 0.5f) * 3f * dp)
 
@@ -163,6 +166,44 @@ class HudView @JvmOverloads constructor(
         if (firing) drawMuzzleFlash(canvas)
 
         postInvalidateOnAnimation()
+    }
+
+    // =====================================================================
+    //                 VIBRACIÓN Y DESENFOQUE DE LA CÁMARA
+    // =====================================================================
+    private var shake = 0f            // intensidad 0..1 (suavizada)
+    private var appliedBlur = -1f
+
+    private fun applyCameraShake(firing: Boolean, dt: Float) {
+        val cam = cameraView ?: return
+        // sube rápido al empezar la metralla y se apaga en ~0.3 s al soltar
+        val target = if (firing) 1f else 0f
+        val rate = if (firing) 18f else 7f
+        shake += (target - shake) * min(1f, rate * dt)
+        if (shake < 0.01f) shake = 0f
+
+        // sacudida: desplazamiento aleatorio + leve rotación en cada frame
+        val amp = 7f * dp * shake
+        cam.translationX = (rnd.nextFloat() - 0.5f) * 2f * amp
+        cam.translationY = (rnd.nextFloat() - 0.5f) * 2f * amp
+        cam.rotation = (rnd.nextFloat() - 0.5f) * 0.8f * shake
+        // agrandar un poco para que no se vean bordes negros al sacudir
+        val scale = 1f + 0.035f * shake
+        cam.scaleX = scale; cam.scaleY = scale
+
+        // desenfoque de movimiento (Android 12+)
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            val blur = 9f * dp * shake
+            if (abs(blur - appliedBlur) > 0.75f * dp || (blur == 0f && appliedBlur != 0f)) {
+                appliedBlur = blur
+                cam.setRenderEffect(
+                    if (blur < 0.5f) null
+                    else android.graphics.RenderEffect.createBlurEffect(
+                        blur * 0.55f, blur, android.graphics.Shader.TileMode.CLAMP
+                    )
+                )
+            }
+        }
     }
 
     // =====================================================================

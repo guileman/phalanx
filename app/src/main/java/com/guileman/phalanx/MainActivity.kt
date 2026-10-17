@@ -76,7 +76,7 @@ class MainActivity : AppCompatActivity() {
         fireButton = findViewById(R.id.fireButton)
         reloadButton = findViewById(R.id.reloadButton)
         previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
-        previewView.implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+        previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE // TextureView: permite aplicar desenfoque
 
         orientation = OrientationTracker(this)
         sound = PhalanxSound(gun)
@@ -85,6 +85,7 @@ class MainActivity : AppCompatActivity() {
 
         hud.gun = gun
         hud.orientation = orientation
+        hud.cameraView = previewView
         hud.detectorReady = detector?.isReady == true
         hud.onGunStateChanged = ::onGunState
 

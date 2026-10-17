@@ -22,6 +22,7 @@ Un proyectil cuenta como **impacto** cuando llega a la distancia estimada del bl
 - **Cinta de rumbo** arriba y **escala de alabeo** abajo.
 - Panel izquierdo: inclinación, rumbo, alabeo, estado del cañón, giro del rotor, cadencia medida, disparos, cargador, temperatura del cañón.
 - Panel derecho: blancos visibles, impactos, proyectiles en vuelo, datos del blanco bloqueado.
+- Durante la metralla la imagen de la cámara vibra y se ve borrosa (desenfoque en Android 12+, solo vibración en versiones anteriores).
 - Recuadros tipo *brackets* sobre los objetos detectados (persona, auto, camión, colectivo, moto, bici, avión, ave, bote, perro, tren).
 
 ## Cómo funciona por dentro
