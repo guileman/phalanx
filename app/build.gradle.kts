@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -50,7 +52,7 @@ val downloadModel by tasks.registering {
     doLast {
         modelFile.parentFile.mkdirs()
         val tmp = File(modelFile.parentFile, modelFile.name + ".part")
-        java.net.URI(modelUrl).toURL().openStream().use { input ->
+        URI(modelUrl).toURL().openStream().use { input ->
             tmp.outputStream().use { output -> input.copyTo(output) }
         }
         tmp.renameTo(modelFile)
