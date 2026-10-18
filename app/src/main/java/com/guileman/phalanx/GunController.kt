@@ -13,6 +13,8 @@ enum class GunState { SAFE, SPIN_UP, FIRING, SPIN_DOWN, RELOADING }
  *                  -> FIRING  (4000 disparos/min)
  * Gatillo suelto   -> SPIN_DOWN (0.5 s, descarga de aire / turbina que se apaga)
  *                  -> SAFE
+ * Gatillo suelto ANTES de llegar a disparar -> SPIN_DOWN "abortado":
+ *                  el motor frena bruscamente (0.3 s), sin descarga de aire.
  */
 class GunController {
 
@@ -20,6 +22,7 @@ class GunController {
         const val RATE_RPM = 4000.0
         const val SPIN_UP_TIME = 1.0
         const val SPIN_DOWN_TIME = 0.5
+        const val BRAKE_TIME = 0.3
         const val MAGAZINE = 1550          // capacidad real del Phalanx Block 1B
         const val RELOAD_TIME = 4.0
     }
@@ -32,6 +35,13 @@ class GunController {
         private set
 
     @Volatile var trigger: Boolean = false
+
+    /** true si el SPIN_DOWN actual viene de soltar el gatillo antes de disparar (freno brusco). */
+    @Volatile var aborted: Boolean = false
+        private set
+    /** Giro del rotor en el momento de empezar a detenerse. */
+    @Volatile var spinAtRelease: Float = 0f
+        private set
 
     var stateTime = 0.0
         private set
@@ -65,6 +75,12 @@ class GunController {
         return false
     }
 
+    private fun beginSpinDown(abort: Boolean) {
+        aborted = abort
+        spinAtRelease = spin
+        setState(GunState.SPIN_DOWN)
+    }
+
     private fun setState(s: GunState) {
         state = s
         stateTime = 0.0
@@ -85,7 +101,7 @@ class GunController {
             GunState.SPIN_UP -> {
                 spin = min(1f, spin + (dt / SPIN_UP_TIME).toFloat())
                 if (!trigger) {
-                    setState(GunState.SPIN_DOWN)
+                    beginSpinDown(abort = true)
                 } else if (spin >= 1f) {
                     setState(GunState.FIRING)
                     shotAccumulator = 1.0 // primer disparo inmediato
@@ -94,7 +110,7 @@ class GunController {
             GunState.FIRING -> {
                 spin = 1f
                 if (!trigger || magazine <= 0) {
-                    setState(GunState.SPIN_DOWN)
+                    beginSpinDown(abort = false)
                 } else {
                     shotAccumulator += dt * RATE_RPM / 60.0
                     shots = min(shotAccumulator.toInt(), magazine)
@@ -106,8 +122,11 @@ class GunController {
                 }
             }
             GunState.SPIN_DOWN -> {
-                spin = max(0f, spin - (dt / SPIN_DOWN_TIME).toFloat())
-                if (stateTime >= SPIN_DOWN_TIME) {
+                val dur = if (aborted) BRAKE_TIME else SPIN_DOWN_TIME
+                val k = (1.0 - stateTime / dur).coerceIn(0.0, 1.0).toFloat()
+                // freno: caída rápida al principio (cuadrática); normal: lineal
+                spin = spinAtRelease * if (aborted) k * k else k
+                if (stateTime >= dur) {
                     spin = 0f
                     setState(GunState.SAFE)
                 } else if (trigger && magazine > 0 && stateTime > 0.08) {

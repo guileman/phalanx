@@ -25,6 +25,8 @@ class Ballistics(capacity: Int = 600) {
 
     val cap = capacity
     val x = FloatArray(cap); val y = FloatArray(cap); val z = FloatArray(cap)
+    /** Posición en el paso anterior (para detectar cruces con aviones). */
+    val px = FloatArray(cap); val py = FloatArray(cap); val pz = FloatArray(cap)
     val vx = FloatArray(cap); val vy = FloatArray(cap); val vz = FloatArray(cap)
     val age = FloatArray(cap)
     /** Distancia recorrida desde el jugador (aprox. = norma de la posición). */
@@ -60,6 +62,7 @@ class Ballistics(capacity: Int = 600) {
 
         projector.deviceToWorld(r, MUZZLE_OFFSET[0], MUZZLE_OFFSET[1], MUZZLE_OFFSET[2], tmp)
         x[i] = tmp[0]; y[i] = tmp[1]; z[i] = tmp[2]
+        px[i] = x[i]; py[i] = y[i]; pz[i] = z[i]
         age[i] = 0f
         dist[i] = 0f
         prevDist[i] = 0f
@@ -78,6 +81,7 @@ class Ballistics(capacity: Int = 600) {
 
     private fun step(i: Int, dt: Float) {
         val d = exp(-DRAG * dt)
+        px[i] = x[i]; py[i] = y[i]; pz[i] = z[i]
         vx[i] *= d; vy[i] *= d; vz[i] = vz[i] * d - GRAVITY * dt
         x[i] += vx[i] * dt; y[i] += vy[i] * dt; z[i] += vz[i] * dt
         age[i] += dt

@@ -20,6 +20,8 @@ import kotlin.random.Random
  *  1) SPIN_UP   : motor eléctrico acelerando (~1 s), tono que sube.
  *  2) FIRING    : metralla a 4000 disparos/min (66.7 Hz) -> el clásico "BRRRRT".
  *  3) SPIN_DOWN : ráfaga de aire a presión / turbina que se apaga (0.5 s).
+ *     Si se suelta antes de disparar: sin aire, el motor frena bruscamente (golpe + chirrido).
+ *  + explosiones (con retardo por la velocidad del sonido).
  *
  * Se genera muestra a muestra en un hilo de audio, así la cadencia es exacta
  * y las transiciones entre los tres sonidos no tienen cortes.
@@ -29,8 +31,25 @@ class PhalanxSound(private val gun: GunController) {
     @Volatile private var running = false
     private var thread: Thread? = null
 
-    /** Volumen maestro 0..1 */
+    /** Volumen maestro 0..1 (el volumen general se maneja con las teclas del celular) */
     @Volatile var volume = 0.9f
+
+    private class Boom(val delaySamples: Int, val gain: Float, val size: Float)
+    private val booms = java.util.concurrent.ConcurrentLinkedQueue<Boom>()
+
+    /**
+     * Encola una explosión.
+     * @param distance distancia en metros (atenúa y retrasa el sonido)
+     * @param size 0..1 tamaño relativo (más grande = más grave y largo)
+     */
+    fun explosion(distance: Float, size: Float) {
+        if (booms.size > 12) return
+        val delay = (distance / 343f).coerceAtMost(2.2f)
+        val gain = (1f / (1f + distance / 250f)).coerceIn(0.12f, 1f) * (0.5f + 0.5f * size)
+        booms.add(Boom((delay * sampleRate).toInt(), gain, size.coerceIn(0f, 1f)))
+    }
+
+    @Volatile private var sampleRate = 48000
 
     fun start() {
         if (running) return
@@ -87,6 +106,7 @@ class PhalanxSound(private val gun: GunController) {
             .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .build()
 
+        sampleRate = sr
         val srf = sr.toFloat()
         val dt = 1f / srf
         val block = FloatArray(256)
@@ -118,6 +138,17 @@ class PhalanxSound(private val gun: GunController) {
         val whooshSvf2 = Svf()
         val outLp = OnePoleLP(0.55f)
 
+        // freno brusco del motor
+        var brakeT = -1f
+        var brakeAmp = 0f
+        var clunkPh = 0.0
+        val scrapeSvf = Svf()
+
+        // voces de explosión
+        class Voice { var wait = 0; var t = 0f; var gain = 0f; var size = 0f; var active = false
+            val lp = OnePoleLP(0.05f); val lp2 = OnePoleLP(0.02f); var ph = 0.0 }
+        val voices = Array(8) { Voice() }
+
         track.play()
         try {
             while (running) {
@@ -126,16 +157,30 @@ class PhalanxSound(private val gun: GunController) {
                 val vol = volume
 
                 if (state != lastState) {
-                    if (state == GunState.SPIN_DOWN && (lastState == GunState.FIRING || lastState == GunState.SPIN_UP)) {
-                        whooshT = 0f
+                    if (state == GunState.SPIN_DOWN) {
+                        if (gun.aborted) {
+                            brakeT = 0f
+                            brakeAmp = 0.35f + 0.65f * gun.spinAtRelease
+                            clunkPh = 0.0
+                        } else {
+                            whooshT = 0f
+                        }
                     }
                     if (state == GunState.FIRING) shotCounter = shotPeriodSamples // disparo inmediato
                     lastState = state
                 }
                 val firing = state == GunState.FIRING
+                val braking = state == GunState.SPIN_DOWN && gun.aborted
+
+                while (true) {
+                    val b = booms.poll() ?: break
+                    val v = voices.firstOrNull { !it.active } ?: voices.minByOrNull { it.gain * (1f - it.t) } ?: break
+                    v.wait = b.delaySamples; v.t = 0f; v.gain = b.gain; v.size = b.size; v.active = true; v.ph = 0.0
+                    v.lp.a = 0.03f + 0.06f * (1f - b.size)
+                }
 
                 for (i in block.indices) {
-                    spinS += spinSmooth * (targetSpin - spinS)
+                    spinS += (if (braking) spinSmooth * 3f else spinSmooth) * (targetSpin - spinS)
                     val noise = rnd.nextFloat() * 2f - 1f
                     var s = 0f
 
@@ -193,6 +238,36 @@ class PhalanxSound(private val gun: GunController) {
                         s += air * env * 0.95f
                         whooshT += dt
                         if (whooshT > dur) whooshT = -1f
+                    }
+
+                    // ---------- 3b) Freno brusco del motor (soltar antes de disparar) ----------
+                    if (brakeT >= 0f) {
+                        val t = brakeT
+                        // golpe mecánico al enganchar el freno
+                        clunkPh += (95.0 - 40.0 * t) / sr
+                        val clunk = (sin(2.0 * PI * clunkPh).toFloat() + noise * 0.5f) * exp(-t * 38f)
+                        // chirrido del rotor frenando: sigue la velocidad del motor
+                        val fc = 400f + 2600f * spinS
+                        val scrape = scrapeSvf.bandpass(noise, fc, 6f, srf) * exp(-t * 7f)
+                        s += (clunk * 0.9f + scrape * 0.55f) * brakeAmp
+                        brakeT += dt
+                        if (brakeT > GunController.BRAKE_TIME + 0.15f) brakeT = -1f
+                    }
+
+                    // ---------- Explosiones ----------
+                    for (v in voices) {
+                        if (!v.active) continue
+                        if (v.wait > 0) { v.wait--; continue }
+                        val t = v.t
+                        val len = 0.6f + 1.2f * v.size
+                        val env = (if (t < 0.004f) t / 0.004f else exp(-(t - 0.004f) * 5.5f / len))
+                        val rumble = v.lp2.process(v.lp.process(noise) * 6f) * 3f
+                        v.ph += (55.0 - 25.0 * v.size) * (1.0 - 0.5 * t) / sr
+                        val thump = sin(2.0 * PI * v.ph).toFloat() * exp(-t * 9f)
+                        val crack = noise * exp(-t * 60f) * 0.6f
+                        s += (rumble + thump * 0.9f + crack) * env * v.gain
+                        v.t += dt
+                        if (v.t > len * 1.6f) v.active = false
                     }
 
                     block[i] = tanh(outLp.process(s) * 1.25f) * 0.92f * vol

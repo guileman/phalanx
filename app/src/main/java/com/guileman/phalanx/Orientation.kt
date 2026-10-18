@@ -96,6 +96,13 @@ class Projector {
         return true
     }
 
+    /** Mundo -> coordenadas de cámara (x derecha, y arriba, z hacia el usuario; delante = z negativo). */
+    fun worldToCamera(r: FloatArray, x: Float, y: Float, z: Float, out: FloatArray) {
+        out[0] = r[0] * x + r[3] * y + r[6] * z
+        out[1] = r[1] * x + r[4] * y + r[7] * z
+        out[2] = r[2] * x + r[5] * y + r[8] * z
+    }
+
     /** Pantalla -> dirección unitaria en el mundo. */
     fun screenToWorldDir(r: FloatArray, sx: Float, sy: Float, out: FloatArray) {
         val dx = (sx - width * 0.5f) / focalPx

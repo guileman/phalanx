@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.hardware.camera2.CameraCharacteristics
+import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
@@ -11,7 +14,6 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import android.util.Size
-import android.view.KeyEvent
 import android.view.Surface
 import android.view.WindowManager
 import android.widget.Toast
@@ -42,6 +44,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var hud: HudView
     private lateinit var fireButton: ControlButtonView
     private lateinit var reloadButton: ControlButtonView
+    private lateinit var aircraftButton: ControlButtonView
+    private var camera: Camera? = null
 
     private val gun = GunController()
     private lateinit var orientation: OrientationTracker
@@ -75,6 +79,9 @@ class MainActivity : AppCompatActivity() {
         hud = findViewById(R.id.hud)
         fireButton = findViewById(R.id.fireButton)
         reloadButton = findViewById(R.id.reloadButton)
+        aircraftButton = findViewById(R.id.aircraftButton)
+        // las teclas de volumen controlan el volumen del juego (sonido multimedia)
+        volumeControlStream = AudioManager.STREAM_MUSIC
         previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
         previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE // TextureView: permite aplicar desenfoque
 
@@ -86,6 +93,7 @@ class MainActivity : AppCompatActivity() {
         hud.gun = gun
         hud.orientation = orientation
         hud.cameraView = previewView
+        hud.sound = sound
         hud.detectorReady = detector?.isReady == true
         hud.onGunStateChanged = ::onGunState
 
@@ -95,6 +103,11 @@ class MainActivity : AppCompatActivity() {
         reloadButton.label = "RECARGA"
         reloadButton.accent = android.graphics.Color.rgb(0xFF, 0xB0, 0x20)
         reloadButton.onPressChanged = { pressed -> if (pressed) gun.requestReload() }
+
+        aircraftButton.label = "AVIONES"
+        aircraftButton.toggleMode = true
+        aircraftButton.accent = android.graphics.Color.rgb(0x39, 0xA8, 0xFF)
+        aircraftButton.onPressChanged = { on -> hud.aircraft.enabled = on }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -171,6 +184,7 @@ class MainActivity : AppCompatActivity() {
                 val camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, pv, an)
                 preview = pv
                 analysis = an
+                this.camera = camera
                 applyFieldOfView(camera)
             } catch (e: Exception) {
                 Log.e(TAG, "No se pudo iniciar la cámara", e)
@@ -196,7 +210,50 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------------- Flash LED al ritmo de la metralla ----------------
+    // 4000 disparos/min = un disparo cada 15 ms. El LED no puede conmutar a 66 Hz,
+    // así que destella cada 2 disparos encendido / 2 apagado (30 ms + 30 ms ≈ 16 destellos/s)
+    // o lo más rápido que permita el hardware.
+    private val torchHandler = Handler(Looper.getMainLooper())
+    private var strobing = false
+    private var torchOn = false
+    private var torchBusy = false
+
+    private val strobeTick = object : Runnable {
+        override fun run() {
+            if (!strobing) return
+            setTorch(!torchOn)
+            torchHandler.postDelayed(this, TORCH_HALF_PERIOD_MS)
+        }
+    }
+
+    private fun setTorch(on: Boolean, force: Boolean = false) {
+        val cam = camera ?: return
+        if (!cam.cameraInfo.hasFlashUnit()) return
+        if (torchBusy && !force) return   // el anterior todavía no terminó: se saltea este destello
+        torchBusy = true
+        torchOn = on
+        try {
+            cam.cameraControl.enableTorch(on).addListener({ torchBusy = false }, ContextCompat.getMainExecutor(this))
+        } catch (e: Exception) {
+            torchBusy = false
+        }
+    }
+
+    private fun startStrobe() {
+        if (strobing) return
+        strobing = true
+        torchHandler.post(strobeTick)
+    }
+
+    private fun stopStrobe() {
+        strobing = false
+        torchHandler.removeCallbacks(strobeTick)
+        if (torchOn) setTorch(false, force = true)
+    }
+
     private fun onGunState(state: GunState) {
+        if (state == GunState.FIRING) startStrobe() else stopStrobe()
         val v = vibrator ?: return
         try {
             when (state) {
@@ -210,23 +267,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Tecla de volumen: bajar = gatillo, subir = recargar
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_DOWN -> { gun.trigger = true; return true }
-            KeyEvent.KEYCODE_VOLUME_UP -> { if (event.repeatCount == 0) gun.requestReload(); return true }
-        }
-        return super.onKeyDown(keyCode, event)
-    }
-
-    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_DOWN -> { gun.trigger = false; return true }
-            KeyEvent.KEYCODE_VOLUME_UP -> return true
-        }
-        return super.onKeyUp(keyCode, event)
-    }
-
     override fun onResume() {
         super.onResume()
         goFullscreen()
@@ -237,6 +277,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         gun.trigger = false
+        stopStrobe()
         orientation.stop()
         sound.stop()
         vibrator?.cancel()
@@ -252,5 +293,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "Phalanx"
+        private const val TORCH_HALF_PERIOD_MS = 30L
     }
 }

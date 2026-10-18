@@ -37,6 +37,11 @@ class HudView @JvmOverloads constructor(
     var onGunStateChanged: ((GunState) -> Unit)? = null
     /** Vista de la cámara: se sacude y desenfoca mientras el cañón dispara. */
     var cameraView: View? = null
+    /** Motor de audio (para explosiones). */
+    var sound: PhalanxSound? = null
+
+    val aircraft = AircraftManager()
+    private val effects = Effects(resources)
 
     val projector = Projector()
     private val ballistics = Ballistics()
@@ -78,14 +83,14 @@ class HudView @JvmOverloads constructor(
         var range = 0f
         var hits = 0
         var flashUntil = 0L
+        var lastExplosion = 0L
     }
 
     private val tracks = ArrayList<Track>()
     private var nextTrackId = 1
     private var locked: Track? = null
 
-    private class Spark(val x: Float, val y: Float, val z: Float, val born: Long)
-    private val sparks = ArrayList<Spark>()
+    private var lastObjectBoomSound = 0L
 
     // ---------- pinturas ----------
     private val dp = resources.displayMetrics.density
@@ -138,6 +143,12 @@ class HudView @JvmOverloads constructor(
             val ahead = (dt * (shots - k - 0.5) / shots).toFloat()
             ballistics.spawn(projector, r, ahead)
         }
+        val dtf = dt.toFloat()
+        val att = Projector.attitude(r)
+        aircraft.update(dtf, att.azimuthDeg, att.elevationDeg, effects, sound)
+        hits += aircraft.checkHits(ballistics, dtf, effects, sound, now)
+        effects.update(dtf)
+
         if (gun.state != lastGunState) {
             lastGunState = gun.state
             onGunStateChanged?.invoke(gun.state)
@@ -151,11 +162,12 @@ class HudView @JvmOverloads constructor(
         canvas.save()
         if (firing) canvas.translate((rnd.nextFloat() - 0.5f) * 3f * dp, (rnd.nextFloat() - 0.5f) * 3f * dp)
 
-        val att = Projector.attitude(r)
         drawPitchLadder(canvas, att)
+        aircraft.draw(canvas, projector, r)
+        effects.draw(canvas, projector, r)
         drawTracers(canvas)
-        drawSparks(canvas, now)
         drawTracks(canvas, now)
+        drawAircraftMarkers(canvas)
         drawCrosshair(canvas)
         drawHeadingTape(canvas, att)
         drawBankScale(canvas, att)
@@ -284,14 +296,37 @@ class HudView @JvmOverloads constructor(
                         t.hits++
                         t.flashUntil = now + 120_000_000L
                         hits++
-                        sparks += Spark(b.x[i], b.y[i], b.z[i], now)
+                        objectExplosion(t, now)
                         b.kill(i)
                         break
                     }
                 }
             }
         }
-        if (sparks.size > 80) sparks.subList(0, sparks.size - 80).clear()
+    }
+
+    /**
+     * Explosión sobre un objeto detectado. Se ancla en el mundo a la distancia estimada del objeto
+     * y su radio es proporcional al tamaño del recuadro (objeto cercano = recuadro grande = explosión grande).
+     */
+    private fun objectExplosion(t: Track, now: Long) {
+        if (now - t.lastExplosion < 70_000_000L) return
+        t.lastExplosion = now
+        val rc = t.rect
+        val sx = rc.left + rc.width() * (0.2f + rnd.nextFloat() * 0.6f)
+        val sy = rc.top + rc.height() * (0.25f + rnd.nextFloat() * 0.6f)
+        projector.screenToWorldDir(r, sx, sy, v3)
+        val dist = t.range * 0.97f
+        val boxPx = max(rc.width(), rc.height())
+        val radiusM = boxPx / projector.focalPx * dist * (0.28f + rnd.nextFloat() * 0.3f)
+        effects.explode(v3[0] * dist, v3[1] * dist, v3[2] * dist, radiusM, 0.8f + 0.4f * rnd.nextFloat())
+        if (rnd.nextFloat() < 0.35f) {
+            effects.smoke(v3[0] * dist, v3[1] * dist, v3[2] * dist + radiusM * 0.5f, radiusM * 0.8f, 2.5f, 0.6f)
+        }
+        if (now - lastObjectBoomSound > 140_000_000L) {
+            lastObjectBoomSound = now
+            sound?.explosion(dist, (boxPx / height).coerceIn(0.1f, 0.8f))
+        }
     }
 
     // =====================================================================
@@ -375,25 +410,6 @@ class HudView @JvmOverloads constructor(
         }
     }
 
-    private fun drawSparks(c: Canvas, now: Long) {
-        val it = sparks.iterator()
-        while (it.hasNext()) {
-            val s = it.next()
-            val age = (now - s.born) / 1e9f
-            if (age > 0.35f) { it.remove(); continue }
-            if (!projector.worldToScreen(r, s.x, s.y, s.z, p0)) continue
-            val k = age / 0.35f
-            val rad = (6 + 26 * k) * dp
-            c.save()
-            c.translate(p0[0], p0[1])
-            c.scale(rad, rad)
-            flashPaint.alpha = (255 * (1 - k)).toInt()
-            c.drawCircle(0f, 0f, 1f, flashPaint)
-            c.restore()
-        }
-        flashPaint.alpha = 255
-    }
-
     private fun drawTracks(c: Canvas, now: Long) {
         for (t in tracks) {
             if (!t.visible) continue
@@ -428,6 +444,80 @@ class HudView @JvmOverloads constructor(
             c.drawText("T%02d".format(t.id % 100), rc.left, rc.bottom + 13 * dp, textSmall)
         }
         line.color = hudColor; text.color = hudColor; textSmall.color = hudColor
+    }
+
+    /** Recuadro, datos, retícula de adelanto e indicador fuera de pantalla para cada avión. */
+    private fun drawAircraftMarkers(c: Canvas) {
+        val pip = FloatArray(3)
+        for (a in aircraft.list) {
+            if (a.down) {
+                if (a.onScreen && a.downAge < 3f) {
+                    textSmall.color = alertColor
+                    val rc = a.screenRect
+                    c.drawText("DERRIBADO", rc.centerX() - textSmall.measureText("DERRIBADO") / 2, rc.top - 10 * dp, textSmall)
+                    textSmall.color = hudColor
+                }
+                continue
+            }
+            if (a.onScreen) {
+                val rc = RectF(a.screenRect)
+                val pad = 10 * dp
+                rc.inset(-pad, -pad)
+                if (rc.width() < 34 * dp) rc.inset(-(34 * dp - rc.width()) / 2, 0f)
+                if (rc.height() < 34 * dp) rc.inset(0f, -(34 * dp - rc.height()) / 2)
+                val col = if (a.hp < a.model.hp) warnColor else alertColor
+                line.color = col; textSmall.color = col
+                val L = 8 * dp
+                path.reset()
+                path.moveTo(rc.left, rc.top + L); path.lineTo(rc.left, rc.top); path.lineTo(rc.left + L, rc.top)
+                path.moveTo(rc.right - L, rc.top); path.lineTo(rc.right, rc.top); path.lineTo(rc.right, rc.top + L)
+                path.moveTo(rc.right, rc.bottom - L); path.lineTo(rc.right, rc.bottom); path.lineTo(rc.right - L, rc.bottom)
+                path.moveTo(rc.left + L, rc.bottom); path.lineTo(rc.left, rc.bottom); path.lineTo(rc.left, rc.bottom - L)
+                c.drawPath(path, line)
+                val kts = (a.speed * 1.944f).roundToInt()
+                c.drawText("${a.model.name}  A%02d".format(a.id % 100), rc.left, rc.top - 18 * dp, textSmall)
+                c.drawText("%dm  %dkt  ".format(a.range.roundToInt(), kts) + "■".repeat(a.hp.coerceAtMost(10)), rc.left, rc.top - 5 * dp, textSmall)
+
+                // retícula de adelanto: dónde apuntar para que las balas lo intercepten
+                aircraft.leadPoint(a, pip)
+                if (projector.worldToScreen(r, pip[0], pip[1], pip[2], p0)) {
+                    line.alpha = 170
+                    c.drawLine(rc.centerX(), rc.centerY(), p0[0], p0[1], line)
+                    line.alpha = 255
+                    c.drawCircle(p0[0], p0[1], 7 * dp, line)
+                    c.drawCircle(p0[0], p0[1], 1.6f * dp, fill.apply { color = col })
+                    fill.color = hudColor
+                }
+            } else {
+                drawOffscreenArrow(c, a)
+            }
+        }
+        line.color = hudColor; textSmall.color = hudColor
+    }
+
+    private fun drawOffscreenArrow(c: Canvas, a: Aircraft) {
+        projector.worldToCamera(r, a.x, a.y, a.z, v3)
+        var dx = v3[0]; var dy = -v3[1]
+        val n = sqrt(dx * dx + dy * dy)
+        if (n < 1e-3f) return
+        dx /= n; dy /= n
+        val cx = width / 2f; val cy = height / 2f
+        // sobre una elipse cerca del borde
+        val ex = width * 0.40f; val ey = height * 0.34f
+        val px = cx + dx * ex; val py = cy + dy * ey
+        val ang = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+        fill.color = alertColor
+        c.save()
+        c.rotate(ang, px, py)
+        path.reset()
+        path.moveTo(px + 14 * dp, py); path.lineTo(px - 6 * dp, py - 9 * dp); path.lineTo(px - 6 * dp, py + 9 * dp); path.close()
+        c.drawPath(path, fill)
+        c.restore()
+        fill.color = hudColor
+        textSmall.color = alertColor
+        val lbl = "${a.model.name} ${a.range.roundToInt()}m"
+        c.drawText(lbl, px - textSmall.measureText(lbl) / 2 - dx * 30 * dp, py - dy * 22 * dp + 4 * dp, textSmall)
+        textSmall.color = hudColor
     }
 
     private fun drawCrosshair(c: Canvas) {
@@ -570,11 +660,15 @@ class HudView @JvmOverloads constructor(
         val x = width - pw - 10 * dp
         var y = 28 * dp
         val lh = 18 * dp
-        c.drawRect(x - 8 * dp, y - 16 * dp, x + pw, y + lh * 6.4f, panelBg)
+        c.drawRect(x - 8 * dp, y - 16 * dp, x + pw, y + lh * 8.4f, panelBg)
         val visible = tracks.count { it.visible }
         c.drawText("BLANCOS   $visible", x, y, text); y += lh
         c.drawText("IMPACTOS  $hits", x, y, text); y += lh
-        c.drawText("EN VUELO  ${ballistics.count}", x, y, text); y += lh * 1.3f
+        c.drawText("EN VUELO  ${ballistics.count}", x, y, text); y += lh
+        text.color = if (aircraft.enabled) warnColor else hudColor
+        c.drawText("AVIONES   " + if (aircraft.enabled) "${aircraft.list.count { !it.down }} ACT" else "OFF", x, y, text); y += lh
+        text.color = hudColor
+        c.drawText("DERRIBOS  ${aircraft.kills}", x, y, text); y += lh * 1.3f
         val t = locked
         if (t != null) {
             text.color = warnColor
@@ -599,6 +693,16 @@ class HudView @JvmOverloads constructor(
             gun.magazine == 0 -> msgs += "SIN MUNICIÓN — RECARGAR" to alertColor
         }
         if (gun.heat > 0.85f) msgs += "CAÑÓN SOBRECALENTADO" to alertColor
+        if (aircraft.enabled) {
+            val contact = aircraft.lastContact
+            if (contact != null && aircraft.contactMessageAge() < 2.5f) {
+                msgs += "CONTACTO AÉREO: $contact" to alertColor
+            } else if (Projector.attitude(r).elevationDeg <= AircraftManager.MIN_ELEVATION) {
+                msgs += "APUNTE AL CIELO (>10°) PARA CONTACTOS" to warnColor
+            } else {
+                msgs += "PRÓXIMO CONTACTO %ds".format(kotlin.math.ceil(aircraft.spawnTimer.toDouble()).toInt().coerceAtLeast(0)) to hudColor
+            }
+        }
         var y = height / 2f + 70 * dp
         for ((m, col) in msgs) {
             textBig.color = col

@@ -22,6 +22,11 @@ class ControlButtonView @JvmOverloads constructor(
         set(v) { field = v; invalidate() }
     var onPressChanged: ((Boolean) -> Unit)? = null
 
+    /** Modo interruptor: cada toque alterna encendido/apagado (onPressChanged recibe el estado). */
+    var toggleMode = false
+    var isOn = false
+        set(v) { field = v; invalidate() }
+
     private var pressedNow = false
     private val dp = resources.displayMetrics.density
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
@@ -35,7 +40,7 @@ class ControlButtonView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         val cx = width / 2f; val cy = height / 2f
         val r = min(width, height) / 2f - 4 * dp
-        body.color = if (pressedNow) accent else Color.argb(110, Color.red(accent) / 3, Color.green(accent) / 3, Color.blue(accent) / 3)
+        body.color = if (pressedNow || (toggleMode && isOn)) accent else Color.argb(110, Color.red(accent) / 3, Color.green(accent) / 3, Color.blue(accent) / 3)
         canvas.drawCircle(cx, cy, r, body)
         ring.color = accent
         ring.strokeWidth = 3 * dp
@@ -59,7 +64,11 @@ class ControlButtonView @JvmOverloads constructor(
         if (p == pressedNow) return
         pressedNow = p
         if (p) performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-        onPressChanged?.invoke(p)
+        if (toggleMode) {
+            if (p) { isOn = !isOn; onPressChanged?.invoke(isOn) }
+        } else {
+            onPressChanged?.invoke(p)
+        }
         invalidate()
     }
 }

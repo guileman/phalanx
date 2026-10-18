@@ -29,4 +29,12 @@
         android:layout_gravity="bottom|start"
         android:layout_marginStart="28dp"
         android:layout_marginBottom="20dp" />
+
+    <com.guileman.phalanx.ControlButtonView
+        android:id="@+id/aircraftButton"
+        android:layout_width="76dp"
+        android:layout_height="76dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="116dp"
+        android:layout_marginBottom="20dp" />
 </FrameLayout>

@@ -9,9 +9,29 @@ como en la realidad.
 
 | Control | Acción |
 |---|---|
-| Botón **FUEGO** (o tecla volumen −) mantenido | El rotor acelera 1 s y luego dispara a 4000 disparos/min |
-| Soltar | Corte de fuego, descarga de aire / turbina que se apaga (0,5 s) |
-| Botón **RECARGA** (o volumen +) | Recarga el cargador de 1550 tiros (4 s) |
+| Botón **FUEGO** mantenido | El rotor acelera 1 s (motor eléctrico) y recién ahí dispara a 4000 disparos/min |
+| Soltar después de disparar | Corte de fuego: descarga de aire / turbina que se apaga (0,5 s) |
+| Soltar antes de llegar a disparar | El motor eléctrico frena bruscamente (sin descarga de aire) |
+| Botón **RECARGA** | Recarga el cargador de 1550 tiros (4 s) |
+| Botón **AVIONES** (interruptor) | Activa los contactos aéreos |
+| Teclas de volumen | Volumen del juego |
+
+### Aviones
+
+Con **AVIONES** encendido y apuntando más de 10° sobre el horizonte, cada 10 segundos aparece un avión al azar:
+**F-16, Mirage III, A-4 Skyhawk, MiG-29 o C-130 Hércules** (modelos 3D low-poly a escala real, en metros).
+Vuelan en coordenadas del mundo real, igual que los proyectiles, así que quedan fijos al entorno de la cámara.
+El HUD los marca con recuadro, distancia, velocidad y vida, y dibuja una **retícula de adelanto** (dónde apuntar
+para que las balas lo intercepten, incluida la caída). Si están fuera de pantalla aparece una flecha roja.
+Los impactos se calculan en 3D; al quedarse sin vida el avión explota, cae girando con fuego y humo, y vuelve a
+explotar al tocar el suelo. El sonido de las explosiones llega con el retardo de la velocidad del sonido.
+
+### Explosiones y flash
+
+- Los impactos sobre objetos detectados (personas, autos…) generan explosiones ancladas al entorno, de tamaño
+  proporcional al recuadro (objeto cercano → explosión grande).
+- Sprites de explosión (16 cuadros) y humo generados proceduralmente (`res/drawable-nodpi`).
+- El flash LED destella durante la metralla, cada 2 disparos (≈16 destellos/s, el máximo práctico del LED).
 
 El blanco más cercano a la mira queda **bloqueado** (rombo ámbar) con distancia estimada y tiempo de vuelo.
 Un proyectil cuenta como **impacto** cuando llega a la distancia estimada del blanco estando dentro de su recuadro.
@@ -34,6 +54,8 @@ Un proyectil cuenta como **impacto** cuando llega a la distancia estimada del bl
 | `GunController.kt` | Máquina de estados: LISTO → ACELERANDO (1 s) → FUEGO (4000/min) → DETENIENDO (0,5 s); munición, recarga, temperatura. |
 | `PhalanxSound.kt` | Sintetizador procedural en tiempo real (AudioTrack, baja latencia): motor eléctrico, metralla a 66,7 Hz y ráfaga de aire con filtro en barrido. Sin archivos de audio. |
 | `TargetDetector.kt` | MediaPipe Object Detector (EfficientDet‑Lite0, COCO) sobre cada cuadro de CameraX. |
+| `Aircraft.kt` | Modelos 3D, vuelo, impactos (segmento de la bala contra la esfera del avión), derribo y dibujo con perspectiva. |
+| `Effects.kt` | Explosiones y humo con sprites, anclados al mundo y escalados por distancia. |
 | `HudView.kt` | Game loop + dibujo. Las detecciones se anclan a una dirección del mundo usando la orientación *al momento de la captura*, así los recuadros siguen al objeto aunque gires el celular entre detecciones. |
 
 ## Compilar
