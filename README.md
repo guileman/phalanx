@@ -24,7 +24,8 @@ Vuelan en coordenadas del mundo real, igual que los proyectiles, así que quedan
 El HUD los marca con recuadro, distancia, velocidad y vida, y dibuja una **retícula de adelanto** (dónde apuntar
 para que las balas lo intercepten, incluida la caída). Si están fuera de pantalla aparece una flecha roja.
 Los impactos se calculan en 3D; al quedarse sin vida el avión explota, cae girando con fuego y humo, y vuelve a
-explotar al tocar el suelo. El sonido de las explosiones llega con el retardo de la velocidad del sonido.
+explotar al tocar el suelo. Cerca de la mitad de los contactos hacen una **pasada de ataque**: vienen de frente
+en picada directo hacia el Phalanx, pasan a pocos metros (alarma "¡AMENAZA ENTRANTE!") y se van trepando. El sonido de las explosiones llega con el retardo de la velocidad del sonido.
 
 ### Explosiones y flash
 

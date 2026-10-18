@@ -475,7 +475,8 @@ class HudView @JvmOverloads constructor(
                 path.moveTo(rc.left + L, rc.bottom); path.lineTo(rc.left, rc.bottom); path.lineTo(rc.left, rc.bottom - L)
                 c.drawPath(path, line)
                 val kts = (a.speed * 1.944f).roundToInt()
-                c.drawText("${a.model.name}  A%02d".format(a.id % 100), rc.left, rc.top - 18 * dp, textSmall)
+                val tag = if (a.attack && a.closest >= a.range - 1f) "  ▼ATQ" else ""
+                c.drawText("${a.model.name}  A%02d".format(a.id % 100) + tag, rc.left, rc.top - 18 * dp, textSmall)
                 c.drawText("%dm  %dkt  ".format(a.range.roundToInt(), kts) + "■".repeat(a.hp.coerceAtMost(10)), rc.left, rc.top - 5 * dp, textSmall)
 
                 // retícula de adelanto: dónde apuntar para que las balas lo intercepten
@@ -695,7 +696,12 @@ class HudView @JvmOverloads constructor(
         if (gun.heat > 0.85f) msgs += "CAÑÓN SOBRECALENTADO" to alertColor
         if (aircraft.enabled) {
             val contact = aircraft.lastContact
-            if (contact != null && aircraft.contactMessageAge() < 2.5f) {
+            val threat = aircraft.incomingThreat()
+            if (threat != null && threat.range < 2500f) {
+                val blink = (System.nanoTime() / 250_000_000L) % 2L == 0L
+                if (blink) msgs += "¡AMENAZA ENTRANTE! ${threat.model.name} ${threat.range.roundToInt()}m" to alertColor
+                else msgs += " " to alertColor
+            } else if (contact != null && aircraft.contactMessageAge() < 2.5f) {
                 msgs += "CONTACTO AÉREO: $contact" to alertColor
             } else if (Projector.attitude(r).elevationDeg <= AircraftManager.MIN_ELEVATION) {
                 msgs += "APUNTE AL CIELO (>10°) PARA CONTACTOS" to warnColor

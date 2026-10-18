@@ -189,6 +189,10 @@ class Aircraft(val id: Int, val model: AircraftModel, var x: Float, var y: Float
     var secondaryLeft = 0
     var secondaryTimer = 0f
     var dead = false
+    /** Pasada de ataque: viene directo hacia el Phalanx. */
+    var attack = false
+    /** Distancia mínima registrada (para saber si ya pasó). */
+    var closest = Float.MAX_VALUE
 
     // orientación (base ortonormal en el mundo)
     val fwd = FloatArray(3); val left = FloatArray(3); val up = FloatArray(3)
@@ -236,6 +240,8 @@ class AircraftManager {
         const val SPAWN_INTERVAL = 10f
         const val MIN_ELEVATION = 10f
         const val MAX_ALIVE = 4
+        /** Probabilidad de que un contacto sea una pasada de ataque directa. */
+        const val ATTACK_CHANCE = 0.45f
     }
 
     var enabled = false
@@ -313,7 +319,9 @@ class AircraftManager {
                     effects.smoke(tmp[0], tmp[1], tmp[2], a.model.span * 0.12f, 2.5f, 0.6f)
                 }
             }
+            if (!a.down && a.attack) attackManeuver(a, dt)
             a.x += a.vx * dt; a.y += a.vy * dt; a.z += a.vz * dt
+            a.closest = min(a.closest, a.range)
             a.updateBasis()
 
             if (a.down && a.z < 0f) {
@@ -329,7 +337,31 @@ class AircraftManager {
         }
     }
 
+    /** Hay algún avión acercándose en pasada de ataque (para la alarma del HUD). */
+    fun incomingThreat(): Aircraft? = list.filter { it.attack && !it.down && it.closest >= it.range - 1f }
+        .minByOrNull { it.range }
+
+    /**
+     * Pasada de ataque: el avión baja en picada hacia un punto a pocos metros del Phalanx;
+     * no baja de ~70 m y, una vez que pasó por encima, tira de la palanca y se va trepando.
+     */
+    private fun attackManeuver(a: Aircraft, dt: Float) {
+        val spd = a.speed
+        val passed = a.x * a.vx + a.y * a.vy + a.z * a.vz > 0f   // ya se está alejando
+        val tooLow = a.z < 70f && a.vz < 0f
+        if (passed || tooLow) {
+            val targetVz = spd * 0.35f
+            if (a.vz < targetVz) {
+                a.vz = min(targetVz, a.vz + 9.81f * 3.5f * dt)   // ~3.5 g de tirón
+                val hs = sqrt(a.vx * a.vx + a.vy * a.vy)
+                val newHs = sqrt(max(1f, spd * spd - a.vz * a.vz))
+                if (hs > 1e-3f) { a.vx *= newHs / hs; a.vy *= newHs / hs }
+            }
+        }
+    }
+
     private fun spawn(camAz: Float, camEl: Float) {
+        if (rnd.nextFloat() < ATTACK_CHANCE) { spawnAttack(camAz, camEl); return }
         val model = AircraftModels.all[rnd.nextInt(AircraftModels.all.size)]
         val range = model.minRange + rnd.nextFloat() * (model.maxRange - model.minRange)
         val side = if (rnd.nextBoolean()) 1f else -1f
@@ -352,6 +384,32 @@ class AircraftManager {
         a.updateBasis()
         list += a
         lastContact = model.name
+        lastContactTime = clock
+    }
+
+    /** Contacto que viene directo hacia el jugador, desde adelante y arriba, en picada. */
+    private fun spawnAttack(camAz: Float, camEl: Float) {
+        val model = AircraftModels.all[rnd.nextInt(AircraftModels.all.size)]
+        val range = 2000f + rnd.nextFloat() * 1200f
+        val az = camAz + (rnd.nextFloat() - 0.5f) * 30f
+        val el = (camEl + rnd.nextFloat() * 10f - 4f).coerceIn(11f, 40f)
+        Projector.dirFromAngles(az, el, tmp)
+        val x = tmp[0] * range; val y = tmp[1] * range; val z = tmp[2] * range
+
+        // punto de paso: muy cerca del Phalanx (de costado y por arriba)
+        val azr = Math.toRadians(az.toDouble())
+        val rightX = cos(azr).toFloat(); val rightY = -sin(azr).toFloat()
+        val lateral = (if (rnd.nextBoolean()) 1f else -1f) * (15f + rnd.nextFloat() * 90f)
+        val passAlt = 70f + rnd.nextFloat() * 130f
+        var dx = rightX * lateral - x; var dy = rightY * lateral - y; var dz = passAlt - z
+        val n = sqrt(dx * dx + dy * dy + dz * dz)
+        dx /= n; dy /= n; dz /= n
+        val spd = model.speed * (1.0f + rnd.nextFloat() * 0.2f)
+        val a = Aircraft(nextId++, model, x, y, z, dx * spd, dy * spd, dz * spd)
+        a.attack = true
+        a.updateBasis()
+        list += a
+        lastContact = model.name + " — ATAQUE"
         lastContactTime = clock
     }
 
