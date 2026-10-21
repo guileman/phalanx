@@ -58,6 +58,10 @@ class HudView @JvmOverloads constructor(
 
     // ---------- estado ----------
     private val r = FloatArray(9)
+    private val prevR = FloatArray(9)
+    private var havePrevR = false
+    /** Velocidad angular del celular = velocidad de giro de la torreta (rad/s, suavizada). */
+    private var slewRate = 0f
     private var lastNanos = 0L
     private var lastGunState = GunState.SAFE
     private var hits = 0
@@ -134,6 +138,7 @@ class HudView @JvmOverloads constructor(
         val dt = if (lastNanos == 0L) 0.0 else ((now - lastNanos) / 1e9).coerceIn(0.0, 0.05)
         lastNanos = now
         orientation.copyMatrix(r)
+        updateSlewRate(dt.toFloat())
 
         // --- cañón y proyectiles ---
         val shots = gun.update(dt, now)
@@ -178,6 +183,20 @@ class HudView @JvmOverloads constructor(
         if (firing) drawMuzzleFlash(canvas)
 
         postInvalidateOnAnimation()
+    }
+
+    /** Ángulo rotado entre frames: acos((traza(Rprev^T·R) − 1) / 2). */
+    private fun updateSlewRate(dt: Float) {
+        if (havePrevR && dt > 0f) {
+            var tr = 0f
+            for (i in 0 until 9) tr += prevR[i] * r[i]
+            val ang = kotlin.math.acos(((tr - 1f) / 2f).coerceIn(-1f, 1f))
+            val rate = ang / dt
+            slewRate += (rate - slewRate) * min(1f, dt * 12f)
+        }
+        System.arraycopy(r, 0, prevR, 0, 9)
+        havePrevR = true
+        sound?.slewRate = if (slewRate > 0.12f) slewRate else 0f
     }
 
     // =====================================================================
@@ -609,7 +628,7 @@ class HudView @JvmOverloads constructor(
         var y = 28 * dp
         val lh = 18 * dp
         val pw = 196 * dp
-        c.drawRect(x - 8 * dp, y - 16 * dp, x + pw, y + lh * 11.2f, panelBg)
+        c.drawRect(x - 8 * dp, y - 16 * dp, x + pw, y + lh * 13.2f, panelBg)
 
         fun row(label: String, value: String, color: Int = hudColor) {
             text.color = hudColor
@@ -641,9 +660,17 @@ class HudView @JvmOverloads constructor(
             GunState.RELOADING -> "RECARGA" to warnColor
         }
         row("ESTADO", st, stColor)
+        val m = gun.mode
+        val modeTxt = if (m.burst > 0) {
+            if (gun.burstLeft > 0) "RÁF ${gun.burstLeft}/${m.burst}" else "RÁFAGA ${m.burst}"
+        } else "CONT ${m.label}"
+        row("MODO", modeTxt)
         row("GIRO", "%3d%%".format((gun.spin * 100).roundToInt()))
         row("CADENCIA", "%4d/min".format(gun.measuredRpm(now)))
         row("DISPAROS", gun.roundsFired.toString())
+        val slewDeg = Math.toDegrees(slewRate.toDouble()).roundToInt()
+        row("TORRETA", "%3d°/s".format(slewDeg) + if (slewDeg > 115) " MÁX" else "",
+            if (slewDeg > 115) warnColor else hudColor)
         val magColor = if (gun.magazine < GunController.MAGAZINE * 0.15f) alertColor else hudColor
         row("CARGADOR", "${gun.magazine}/${GunController.MAGAZINE}", magColor)
         bar(gun.magazine / GunController.MAGAZINE.toFloat(), magColor)

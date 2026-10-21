@@ -9,12 +9,22 @@ como en la realidad.
 
 | Control | Acción |
 |---|---|
-| Botón **FUEGO** mantenido | El rotor acelera 1 s (motor eléctrico) y recién ahí dispara a 4000 disparos/min |
+| Botón **FUEGO** mantenido | El motor neumático acelera los cañones (0,4 s) y recién ahí dispara |
 | Soltar después de disparar | Corte de fuego: descarga de aire / turbina que se apaga (0,5 s) |
-| Soltar antes de llegar a disparar | El motor eléctrico frena bruscamente (sin descarga de aire) |
+| Soltar antes de llegar a disparar | El rotor frena bruscamente (sin descarga de aire) |
+| Botón **MODO** | Cicla 4500/min → 3000/min → ráfaga 60 → ráfaga 100 (en ráfaga, un toque dispara la ráfaga completa) |
 | Botón **RECARGA** | Recarga el cargador de 1550 tiros (4 s) |
 | Botón **AVIONES** (interruptor) | Activa los contactos aéreos |
 | Teclas de volumen | Volumen del juego |
+
+### Sonido (basado en el Phalanx real)
+
+- El cañón M61A1 del Phalanx es **accionado neumáticamente** (controlado eléctricamente): al apretar se oye la válvula
+  de aire y el silbido de la turbina acelerando el rotor de 6 cañones.
+- Metralla a 4500 o 3000 disparos/min (cadencias seleccionables del Block 1/1B); ráfagas de 60/100 tiros como el Block 0.
+- Al cortar: descarga de aire y rotor desacelerando.
+- Lo eléctrico son los motores de la torreta (giro/elevación, hasta ~115°/s): al mover el celular se oye el zumbido
+  de los servos, proporcional a la velocidad (el HUD muestra TORRETA °/s y avisa MÁX por encima de 115°/s).
 
 ### Aviones
 
@@ -52,8 +62,8 @@ Un proyectil cuenta como **impacto** cuando llega a la distancia estimada del bl
 |---|---|
 | `Orientation.kt` | Vector de rotación (giroscopio + acelerómetro + brújula) → matriz mundo↔celular; proyección pinhole con el FOV real de la cámara (leído de Camera2). |
 | `Ballistics.kt` | Proyectiles en coordenadas del mundo (Este/Norte/Arriba): 1100 m/s, gravedad, arrastre, dispersión ~2,8 mrad. |
-| `GunController.kt` | Máquina de estados: LISTO → ACELERANDO (1 s) → FUEGO (4000/min) → DETENIENDO (0,5 s); munición, recarga, temperatura. |
-| `PhalanxSound.kt` | Sintetizador procedural en tiempo real (AudioTrack, baja latencia): motor eléctrico, metralla a 66,7 Hz y ráfaga de aire con filtro en barrido. Sin archivos de audio. |
+| `GunController.kt` | Máquina de estados: LISTO → ACELERANDO (0,4 s) → FUEGO (4500/3000 por min o ráfagas 60/100) → DETENIENDO (0,5 s); munición, recarga, temperatura. |
+| `PhalanxSound.kt` | Sintetizador procedural en tiempo real (AudioTrack, baja latencia): motor neumático, servos de la torreta, metralla a 75/50 Hz, freno, explosiones y ráfaga de aire con filtro en barrido. Sin archivos de audio. |
 | `TargetDetector.kt` | MediaPipe Object Detector (EfficientDet‑Lite0, COCO) sobre cada cuadro de CameraX. |
 | `Aircraft.kt` | Modelos 3D, vuelo, impactos (segmento de la bala contra la esfera del avión), derribo y dibujo con perspectiva. |
 | `Effects.kt` | Explosiones y humo con sprites, anclados al mundo y escalados por distancia. |

@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fireButton: ControlButtonView
     private lateinit var reloadButton: ControlButtonView
     private lateinit var aircraftButton: ControlButtonView
+    private lateinit var modeButton: ControlButtonView
     private var camera: Camera? = null
 
     private val gun = GunController()
@@ -80,6 +81,7 @@ class MainActivity : AppCompatActivity() {
         fireButton = findViewById(R.id.fireButton)
         reloadButton = findViewById(R.id.reloadButton)
         aircraftButton = findViewById(R.id.aircraftButton)
+        modeButton = findViewById(R.id.modeButton)
         // las teclas de volumen controlan el volumen del juego (sonido multimedia)
         volumeControlStream = AudioManager.STREAM_MUSIC
         previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -108,6 +110,16 @@ class MainActivity : AppCompatActivity() {
         aircraftButton.toggleMode = true
         aircraftButton.accent = android.graphics.Color.rgb(0x39, 0xA8, 0xFF)
         aircraftButton.onPressChanged = { on -> hud.aircraft.enabled = on }
+
+        // modo de fuego: 4500 → 3000 → ráfaga 60 → ráfaga 100
+        modeButton.label = gun.mode.label
+        modeButton.accent = android.graphics.Color.rgb(0x39, 0xFF, 0x6A)
+        modeButton.onPressChanged = { pressed ->
+            if (pressed) {
+                gun.mode = gun.mode.next()
+                modeButton.label = gun.mode.label
+            }
+        }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -211,7 +223,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---------------- Flash LED al ritmo de la metralla ----------------
-    // 4000 disparos/min = un disparo cada 15 ms. El LED no puede conmutar a 66 Hz,
+    // 4500 disparos/min = un disparo cada 13 ms. El LED no puede conmutar a 75 Hz,
     // así que destella cada 2 disparos encendido / 2 apagado (30 ms + 30 ms ≈ 16 destellos/s)
     // o lo más rápido que permita el hardware.
     private val torchHandler = Handler(Looper.getMainLooper())
@@ -257,8 +269,12 @@ class MainActivity : AppCompatActivity() {
         val v = vibrator ?: return
         try {
             when (state) {
-                GunState.SPIN_UP -> v.vibrate(VibrationEffect.createOneShot(1000, 35))
-                GunState.FIRING -> v.vibrate(VibrationEffect.createWaveform(longArrayOf(8, 7), intArrayOf(220, 0), 0))
+                GunState.SPIN_UP -> v.vibrate(VibrationEffect.createOneShot((GunController.SPIN_UP_TIME * 1000).toLong(), 35))
+                GunState.FIRING -> {
+                    // pulso por cada 2 disparos según la cadencia
+                    val half = (60_000.0 / gun.rateRpm).toLong().coerceAtLeast(5)
+                    v.vibrate(VibrationEffect.createWaveform(longArrayOf(half, half), intArrayOf(220, 0), 0))
+                }
                 GunState.SPIN_DOWN -> v.vibrate(VibrationEffect.createOneShot(300, 60))
                 else -> v.cancel()
             }

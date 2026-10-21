@@ -17,8 +17,10 @@ import kotlin.random.Random
 /**
  * Sintetizador procedural en tiempo real del sonido del Phalanx.
  *
- *  1) SPIN_UP   : motor eléctrico acelerando (~1 s), tono que sube.
- *  2) FIRING    : metralla a 4000 disparos/min (66.7 Hz) -> el clásico "BRRRRT".
+ *  1) SPIN_UP   : motor NEUMÁTICO (aire comprimido) acelerando el conjunto de cañones (~0.4 s):
+ *                 golpe de válvula + silbido de turbina + soplido de aire que sube.
+ *  2) FIRING    : metralla a 4500 o 3000 disparos/min (75 / 50 Hz) -> el clásico "BRRRRT".
+ *  +) Servos eléctricos de la torreta: zumbido proporcional a la velocidad de giro del celular.
  *  3) SPIN_DOWN : ráfaga de aire a presión / turbina que se apaga (0.5 s).
  *     Si se suelta antes de disparar: sin aire, el motor frena bruscamente (golpe + chirrido).
  *  + explosiones (con retardo por la velocidad del sonido).
@@ -50,6 +52,9 @@ class PhalanxSound(private val gun: GunController) {
     }
 
     @Volatile private var sampleRate = 48000
+
+    /** Velocidad angular de la torreta en rad/s (la calcula el HUD a partir de los sensores). */
+    @Volatile var slewRate = 0f
 
     fun start() {
         if (running) return
@@ -117,9 +122,11 @@ class PhalanxSound(private val gun: GunController) {
         val spinSmooth = 1f - exp(-1f / (0.012f * srf))
         var motorPh1 = 0.0
         var motorPh2 = 0.0
-        val brushHp = OnePoleLP(0.25f)
+        val valveHp = OnePoleLP(0.3f)
+        val airSvf = Svf()
+        var valveT = -1f
 
-        val shotPeriodSamples = srf * 60f / GunController.RATE_RPM.toFloat()
+        var shotPeriodSamples = srf * 60f / 4500f
         var shotCounter = 0f
         var crackEnv = 0f
         var bodyEnv = 0f
@@ -149,6 +156,11 @@ class PhalanxSound(private val gun: GunController) {
             val lp = OnePoleLP(0.05f); val lp2 = OnePoleLP(0.02f); var ph = 0.0 }
         val voices = Array(8) { Voice() }
 
+        // servos de la torreta
+        var servoS = 0f
+        var servoPh = 0.0
+        var pwmPh = 0.0
+
         track.play()
         try {
             while (running) {
@@ -166,11 +178,16 @@ class PhalanxSound(private val gun: GunController) {
                             whooshT = 0f
                         }
                     }
-                    if (state == GunState.FIRING) shotCounter = shotPeriodSamples // disparo inmediato
+                    if (state == GunState.SPIN_UP && gun.spin < 0.3f) valveT = 0f   // se abre la válvula de aire
+                    if (state == GunState.FIRING) {
+                        shotPeriodSamples = srf * 60f / gun.rateRpm.toFloat()
+                        shotCounter = shotPeriodSamples // disparo inmediato
+                    }
                     lastState = state
                 }
                 val firing = state == GunState.FIRING
                 val braking = state == GunState.SPIN_DOWN && gun.aborted
+                val slewTarget = slewRate
 
                 while (true) {
                     val b = booms.poll() ?: break
@@ -184,24 +201,46 @@ class PhalanxSound(private val gun: GunController) {
                     val noise = rnd.nextFloat() * 2f - 1f
                     var s = 0f
 
-                    // ---------- 1) Motor eléctrico ----------
+                    // ---------- 1) Motor neumático ----------
+                    if (valveT >= 0f) {
+                        // "pfff" de la válvula de aire al abrirse
+                        val hp = noise - valveHp.process(noise)
+                        s += hp * exp(-valveT * 22f) * 0.45f
+                        valveT += dt
+                        if (valveT > 0.3f) valveT = -1f
+                    }
                     if (spinS > 0.0005f) {
-                        val shaped = spinS.pow(1.15f)
-                        val f = 55.0 + 1150.0 * shaped
-                        motorPh1 += f / sr
-                        motorPh2 += f * 3.21 / sr
+                        val shaped = spinS.pow(0.9f)
+                        // silbido de la turbina de aire (paso de álabes)
+                        motorPh1 += (300.0 + 3200.0 * shaped) / sr
                         if (motorPh1 > 1.0) motorPh1 -= 1.0
+                        // paso de los 6 cañones: 750 rpm del rotor x 6 = 75 Hz a 4500 disparos/min
+                        motorPh2 += (spinS * 75.0) / sr
                         if (motorPh2 > 1.0) motorPh2 -= 1.0
                         val p1 = 2.0 * PI * motorPh1
-                        val whine = (sin(p1) * 0.55 + sin(2 * p1) * 0.28 + sin(3 * p1) * 0.12 +
-                                sin(2.0 * PI * motorPh2) * 0.16).toFloat()
-                        val brush = (noise - brushHp.process(noise)) * 0.25f
+                        val whine = (sin(p1) * 0.5 + sin(2 * p1) * 0.18).toFloat()
+                        val air = airSvf.bandpass(noise, 500f + 3000f * shaped, 0.7f, srf)
+                        val whirl = 0.75f + 0.25f * sin(2.0 * PI * motorPh2).toFloat()
                         // en ráfaga el motor queda de fondo
-                        val motorAmp = 0.30f * spinS * (1f - 0.55f * fireMix)
-                        s += (whine + brush * shaped) * motorAmp
+                        val motorAmp = 0.34f * shaped * (1f - 0.5f * fireMix)
+                        s += (air * 1.1f * whirl + whine * 0.35f) * motorAmp
                     }
 
-                    // ---------- 2) Metralla 4000 rpm ----------
+                    // ---------- Servos eléctricos de la torreta ----------
+                    servoS += 0.0015f * (slewTarget - servoS)
+                    if (servoS > 0.02f) {
+                        val k = min(1f, servoS / 2.0f)          // 2 rad/s ≈ 115°/s, el máximo del Phalanx
+                        servoPh += (160.0 + 950.0 * k) / sr
+                        if (servoPh > 1.0) servoPh -= 1.0
+                        pwmPh += 2600.0 / sr
+                        if (pwmPh > 1.0) pwmPh -= 1.0
+                        val ps = 2.0 * PI * servoPh
+                        val gear = (sin(ps) * 0.6 + sin(3 * ps) * 0.25 + sin(5.3 * ps) * 0.1).toFloat()
+                        val pwm = sin(2.0 * PI * pwmPh).toFloat() * 0.12f
+                        s += (gear + pwm) * 0.16f * k.pow(0.8f)
+                    }
+
+                    // ---------- 2) Metralla (4500 / 3000 por minuto) ----------
                     fireMix += ((if (firing) 1f else 0f) - fireMix) * 0.004f
                     if (firing) {
                         shotCounter += 1f
