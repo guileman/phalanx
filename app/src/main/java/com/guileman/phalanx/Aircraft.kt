@@ -59,6 +59,24 @@ class Mesh {
         }
     }
 
+    /**
+     * Prisma deformado (8 vértices): base y tapa en orden
+     * (x0,yIzq,zBajo) … igual que una caja: [atrás-izq-abajo, atrás-izq-arriba, atrás-der-abajo, atrás-der-arriba,
+     *  adelante-izq-abajo, adelante-izq-arriba, adelante-der-abajo, adelante-der-arriba].
+     */
+    fun prism(color: Int, v: Array<FloatArray>) {
+        val faces = arrayOf(intArrayOf(0, 1, 3, 2), intArrayOf(4, 6, 7, 5), intArrayOf(0, 4, 5, 1),
+            intArrayOf(2, 3, 7, 6), intArrayOf(0, 2, 6, 4), intArrayOf(1, 5, 7, 3))
+        for (f in faces) poly(color, v[f[0]] + v[f[1]] + v[f[2]] + v[f[3]])
+    }
+
+    /** Caja alineada: x0..x1, y ±hw (centrada en yc), z0..z1. */
+    fun box(color: Int, x0: Float, x1: Float, hw: Float, z0: Float, z1: Float, yc: Float = 0f) {
+        prism(color, arrayOf(
+            floatArrayOf(x0, yc + hw, z0), floatArrayOf(x0, yc + hw, z1), floatArrayOf(x0, yc - hw, z0), floatArrayOf(x0, yc - hw, z1),
+            floatArrayOf(x1, yc + hw, z0), floatArrayOf(x1, yc + hw, z1), floatArrayOf(x1, yc - hw, z0), floatArrayOf(x1, yc - hw, z1)))
+    }
+
     /** Deriva vertical: contorno (x, z). [y] desplazamiento lateral, [cantDeg] inclinación hacia afuera. */
     fun fin(color: Int, y: Float, cantDeg: Float, vararg xz: Float) {
         val k = tan(Math.toRadians(cantDeg.toDouble())).toFloat()
@@ -86,6 +104,8 @@ class AircraftModel(
     val minRange: Float,
     val maxRange: Float,
     val mesh: Mesh,
+    /** Vehículo terrestre (carro de combate). */
+    val ground: Boolean = false,
 ) {
     val hitRadius = max(length, span) * 0.42f
 }
@@ -169,6 +189,78 @@ object AircraftModels {
     }
 
     val all: List<AircraftModel> by lazy { listOf(f16(), mirage(), skyhawk(), mig29(), c130()) }
+
+    // ----------------------------- carros de combate -----------------------------
+    // Coordenadas: x adelante, y izquierda, z arriba; z = 0 es el suelo.
+    private val track = Color.rgb(42, 42, 40)
+
+    /** Casco con frente inclinado + orugas. */
+    private fun hull(m: Mesh, c: Int, L: Float, W: Float, H: Float, glacis: Float = 1.6f) {
+        val hw = W / 2
+        for (side in floatArrayOf(1f, -1f)) {
+            m.box(track, -L / 2, L / 2 - 0.3f, 0.32f, 0f, 0.95f, yc = side * (hw - 0.32f))
+            m.box(c, -L / 2 + 0.1f, L / 2 - 0.4f, 0.34f, 0.95f, 1.05f, yc = side * (hw - 0.3f))   // guardabarros
+        }
+        val y = hw - 0.62f
+        m.prism(c, arrayOf(
+            floatArrayOf(-L / 2, y, 0.45f), floatArrayOf(-L / 2, y, H), floatArrayOf(-L / 2, -y, 0.45f), floatArrayOf(-L / 2, -y, H),
+            floatArrayOf(L / 2, y, 0.55f), floatArrayOf(L / 2 - glacis, y, H), floatArrayOf(L / 2, -y, 0.55f), floatArrayOf(L / 2 - glacis, -y, H)))
+        m.box(c, -L / 2 + 0.2f, L / 2 - glacis, hw - 0.05f, H - 0.35f, H)                         // cubierta sobre las orugas
+    }
+
+    private fun gun(m: Mesh, c: Int, x0: Float, x1: Float, z: Float, r: Float) {
+        m.body(c, st(x0, r * 1.5f, r * 1.5f, z), st(x0 + 0.6f, r, r, z), st(x1 - 0.5f, r, r, z),
+            st(x1 - 0.45f, r * 1.6f, r * 1.6f, z), st(x1 - 0.1f, r * 1.6f, r * 1.6f, z), st(x1, r, r, z), sides = 6)
+    }
+
+    private fun t72(): AircraftModel {
+        val c = Color.rgb(96, 104, 70)
+        val m = Mesh()
+        hull(m, c, 6.9f, 3.6f, 1.55f)
+        // torreta en forma de cúpula
+        m.body(c, st(1.5f, 0f, 0f, 1.6f), st(1.0f, 1.0f, 0.45f, 1.65f), st(0f, 1.25f, 0.55f, 1.65f),
+            st(-1.2f, 1.15f, 0.48f, 1.62f), st(-1.7f, 0f, 0f, 1.6f), sides = 10)
+        gun(m, Color.rgb(78, 84, 58), 1.2f, 7.4f, 1.85f, 0.09f)
+        return AircraftModel("T-72", 9.5f, 3.6f, 12f, 12, 200f, 1200f, m, ground = true)
+    }
+
+    private fun abrams(): AircraftModel {
+        val c = Color.rgb(176, 162, 122)
+        val m = Mesh()
+        hull(m, c, 7.9f, 3.7f, 1.65f, glacis = 1.9f)
+        // torreta angular, baja y ancha
+        m.prism(c, arrayOf(
+            floatArrayOf(-3.2f, 1.8f, 1.65f), floatArrayOf(-3.2f, 1.7f, 2.4f), floatArrayOf(-3.2f, -1.8f, 1.65f), floatArrayOf(-3.2f, -1.7f, 2.4f),
+            floatArrayOf(2.2f, 1.5f, 1.65f), floatArrayOf(1.4f, 1.3f, 2.4f), floatArrayOf(2.2f, -1.5f, 1.65f), floatArrayOf(1.4f, -1.3f, 2.4f)))
+        gun(m, Color.rgb(140, 128, 96), 1.9f, 7.6f, 2.05f, 0.1f)
+        return AircraftModel("M1 ABRAMS", 9.8f, 3.7f, 13f, 12, 200f, 1200f, m, ground = true)
+    }
+
+    private fun leopard2(): AircraftModel {
+        val c = Color.rgb(84, 100, 74)
+        val m = Mesh()
+        hull(m, c, 7.7f, 3.7f, 1.6f)
+        // torreta con frente en cuña
+        m.prism(c, arrayOf(
+            floatArrayOf(-2.6f, 1.75f, 1.6f), floatArrayOf(-2.6f, 1.7f, 2.45f), floatArrayOf(-2.6f, -1.75f, 1.6f), floatArrayOf(-2.6f, -1.7f, 2.45f),
+            floatArrayOf(2.4f, 0.6f, 1.6f), floatArrayOf(2.2f, 0.55f, 2.45f), floatArrayOf(2.4f, -0.6f, 1.6f), floatArrayOf(2.2f, -0.55f, 2.45f)))
+        gun(m, Color.rgb(66, 78, 58), 2.2f, 8.6f, 2.05f, 0.1f)
+        return AircraftModel("LEOPARD 2", 10.9f, 3.7f, 13f, 12, 200f, 1200f, m, ground = true)
+    }
+
+    private fun tam(): AircraftModel {
+        val c = Color.rgb(126, 116, 82)
+        val m = Mesh()
+        hull(m, c, 6.8f, 3.1f, 1.75f, glacis = 1.4f)
+        // torreta en la parte trasera (chasis tipo Marder)
+        m.prism(c, arrayOf(
+            floatArrayOf(-2.8f, 1.3f, 1.75f), floatArrayOf(-2.8f, 1.25f, 2.5f), floatArrayOf(-2.8f, -1.3f, 1.75f), floatArrayOf(-2.8f, -1.25f, 2.5f),
+            floatArrayOf(0.4f, 1.2f, 1.75f), floatArrayOf(-0.2f, 1.0f, 2.5f), floatArrayOf(0.4f, -1.2f, 1.75f), floatArrayOf(-0.2f, -1.0f, 2.5f)))
+        gun(m, Color.rgb(98, 90, 64), 0.2f, 5.6f, 2.15f, 0.08f)
+        return AircraftModel("TAM", 8.2f, 3.1f, 12f, 12, 200f, 1100f, m, ground = true)
+    }
+
+    val tanks: List<AircraftModel> by lazy { listOf(tam(), t72(), abrams(), leopard2()) }
 }
 
 // =====================================================================
@@ -205,6 +297,7 @@ class Aircraft(val id: Int, val model: AircraftModel, var x: Float, var y: Float
 
     fun updateBasis() {
         val hs = sqrt(vx * vx + vy * vy)
+        if (hs < 1e-3f && abs(vz) < 1e-3f) return   // detenido: conserva la orientación
         val psi = atan2(vx, vy)              // rumbo (desde el norte, horario)
         val theta = atan2(vz, hs)            // cabeceo
         val cp = cos(psi); val sp = sin(psi); val ct = cos(theta); val stt = sin(theta)
@@ -238,7 +331,9 @@ class AircraftManager {
 
     companion object {
         const val SPAWN_INTERVAL = 10f
-        const val MIN_ELEVATION = 10f
+        const val TANK_INTERVAL = 12f
+        /** Altura del suelo respecto del celular (m). */
+        const val GROUND_Z = -1.5f
         const val MAX_ALIVE = 4
         /** Probabilidad de que un contacto sea una pasada de ataque directa. */
         const val ATTACK_CHANCE = 0.45f
@@ -253,6 +348,19 @@ class AircraftManager {
         private set
     var kills = 0
         private set
+
+    /** Carros de combate activados (botón CARROS). */
+    var tanksEnabled = false
+        set(v) {
+            if (v && !field) tankTimer = 2f
+            field = v
+        }
+    var tankTimer = 2f
+        private set
+    var tankKills = 0
+        private set
+
+    /** Último mensaje de contacto ("CONTACTO AÉREO: F-16", "CONTACTO TERRESTRE: TAM"). */
     var lastContact: String? = null
         private set
     var lastContactTime = 0f
@@ -269,11 +377,18 @@ class AircraftManager {
 
     fun update(dt: Float, camAzDeg: Float, camElDeg: Float, effects: Effects, sound: PhalanxSound?) {
         clock += dt
-        if (enabled && camElDeg > MIN_ELEVATION) {
+        if (enabled) {
             spawnTimer -= dt
             if (spawnTimer <= 0f) {
                 spawnTimer = SPAWN_INTERVAL
-                if (list.count { !it.down } < MAX_ALIVE) spawn(camAzDeg, camElDeg)
+                if (list.count { !it.down && !it.model.ground } < MAX_ALIVE) spawn(camAzDeg, camElDeg)
+            }
+        }
+        if (tanksEnabled) {
+            tankTimer -= dt
+            if (tankTimer <= 0f) {
+                tankTimer = TANK_INTERVAL
+                if (list.count { !it.down && it.model.ground } < MAX_ALIVE) spawnTank(camAzDeg)
             }
         }
 
@@ -281,7 +396,33 @@ class AircraftManager {
         while (it.hasNext()) {
             val a = it.next()
             a.age += dt
-            if (a.down) {
+            if (a.down && a.model.ground) {
+                // carro destruido: queda ardiendo en el lugar
+                a.downAge += dt
+                a.smokeTimer -= dt
+                if (a.smokeTimer <= 0f) {
+                    a.smokeTimer = 0.08f
+                    a.toWorld((rnd.nextFloat() - 0.5f) * 2f, (rnd.nextFloat() - 0.5f) * 1.5f, 2.2f, tmp)
+                    effects.smoke(tmp[0], tmp[1], tmp[2], 1.6f, 6f, 0.85f)
+                }
+                a.fireTimer -= dt
+                if (a.fireTimer <= 0f && a.downAge < 12f) {
+                    a.fireTimer = 0.14f
+                    a.toWorld((rnd.nextFloat() - 0.5f) * 3f, (rnd.nextFloat() - 0.5f) * 2f, 2f, tmp)
+                    effects.explode(tmp[0], tmp[1], tmp[2], 0.9f, 0.5f)
+                }
+                if (a.secondaryLeft > 0) {
+                    a.secondaryTimer -= dt
+                    if (a.secondaryTimer <= 0f) {
+                        // explota la munición del carro
+                        a.secondaryLeft--
+                        a.secondaryTimer = 0.25f + rnd.nextFloat() * 0.5f
+                        a.toWorld((rnd.nextFloat() - 0.5f) * 3f, (rnd.nextFloat() - 0.5f) * 2f, 2.2f, tmp)
+                        effects.explode(tmp[0], tmp[1], tmp[2], 3f + rnd.nextFloat() * 2f)
+                        sound?.explosion(a.range, 0.5f)
+                    }
+                }
+            } else if (a.down) {
                 a.downAge += dt
                 // cae: gravedad, pierde velocidad y gira sobre su eje
                 val drag = exp(-0.25f * dt)
@@ -315,8 +456,8 @@ class AircraftManager {
                 a.smokeTimer -= dt
                 if (a.smokeTimer <= 0f) {
                     a.smokeTimer = 0.1f
-                    a.toWorld(-a.model.length * 0.5f, 0f, 0f, tmp)
-                    effects.smoke(tmp[0], tmp[1], tmp[2], a.model.span * 0.12f, 2.5f, 0.6f)
+                    if (a.model.ground) a.toWorld(-1.5f, 0f, 2f, tmp) else a.toWorld(-a.model.length * 0.5f, 0f, 0f, tmp)
+                    effects.smoke(tmp[0], tmp[1], tmp[2], if (a.model.ground) 0.8f else a.model.span * 0.12f, 2.5f, 0.6f)
                 }
             }
             if (!a.down && a.attack) attackManeuver(a, dt)
@@ -324,14 +465,14 @@ class AircraftManager {
             a.closest = min(a.closest, a.range)
             a.updateBasis()
 
-            if (a.down && a.z < 0f) {
+            if (a.down && !a.model.ground && a.z < 0f) {
                 // llega al suelo
                 effects.explode(a.x, a.y, 0f, a.model.span * 1.2f, 1.3f)
                 for (k in 0 until 6) effects.smoke(a.x + (rnd.nextFloat() - 0.5f) * 20f, a.y + (rnd.nextFloat() - 0.5f) * 20f,
                     rnd.nextFloat() * 10f, a.model.span * 0.6f, 6f)
                 sound?.explosion(a.range, 1f)
                 it.remove()
-            } else if (a.range > 5000f || a.age > 60f || (a.down && a.downAge > 25f)) {
+            } else if (a.range > 5000f || a.age > (if (a.model.ground) 150f else 60f) || (a.down && a.downAge > 25f)) {
                 it.remove()
             }
         }
@@ -383,7 +524,7 @@ class AircraftManager {
         val a = Aircraft(nextId++, model, x, y, z, dx * spd, dy * spd, climb * spd)
         a.updateBasis()
         list += a
-        lastContact = model.name
+        lastContact = "CONTACTO AÉREO: " + model.name
         lastContactTime = clock
     }
 
@@ -409,7 +550,35 @@ class AircraftManager {
         a.attack = true
         a.updateBasis()
         list += a
-        lastContact = model.name + " — ATAQUE"
+        lastContact = "CONTACTO AÉREO: " + model.name + " — ATAQUE"
+        lastContactTime = clock
+    }
+
+    /** Carro de combate: aparece sobre el suelo, cruzando o acercándose al jugador. */
+    private fun spawnTank(camAz: Float) {
+        val model = AircraftModels.tanks[rnd.nextInt(AircraftModels.tanks.size)]
+        val range = model.minRange + rnd.nextFloat() * (model.maxRange - model.minRange)
+        val side = if (rnd.nextBoolean()) 1f else -1f
+        val az = camAz + side * (4f + rnd.nextFloat() * 30f)
+        val azr = Math.toRadians(az.toDouble())
+        val x = (sin(azr) * range).toFloat(); val y = (cos(azr) * range).toFloat()
+        val spd = model.speed * (0.7f + rnd.nextFloat() * 0.4f)
+        var dx: Float; var dy: Float
+        if (rnd.nextBoolean()) {
+            // avanza hacia el jugador (pasa a un costado)
+            val rightX = cos(azr).toFloat(); val rightY = -sin(azr).toFloat()
+            val lateral = (if (rnd.nextBoolean()) 1f else -1f) * (20f + rnd.nextFloat() * 120f)
+            dx = rightX * lateral - x; dy = rightY * lateral - y
+        } else {
+            // cruza de costado
+            dx = -side * cos(azr).toFloat(); dy = side * sin(azr).toFloat()
+        }
+        val n = sqrt(dx * dx + dy * dy)
+        dx /= n; dy /= n
+        val a = Aircraft(nextId++, model, x, y, GROUND_Z, dx * spd, dy * spd, 0f)
+        a.updateBasis()
+        list += a
+        lastContact = "CONTACTO TERRESTRE: " + model.name
         lastContactTime = clock
     }
 
@@ -465,6 +634,18 @@ class AircraftManager {
 
     private fun shootDown(a: Aircraft, effects: Effects, sound: PhalanxSound?) {
         a.down = true
+        if (a.model.ground) {
+            a.vx = 0f; a.vy = 0f; a.vz = 0f
+            a.secondaryLeft = 2 + rnd.nextInt(3)
+            a.secondaryTimer = 0.4f
+            a.toWorld(0f, 0f, 1.8f, tmp)
+            effects.explode(tmp[0], tmp[1], tmp[2], 6f, 1.3f)
+            effects.explode(tmp[0], tmp[1], tmp[2] + 3f, 4f, 1.1f)
+            sound?.explosion(a.range, 1f)
+            tankKills++
+            onShotDown?.invoke(a)
+            return
+        }
         a.rollRate = (if (rnd.nextBoolean()) 1f else -1f) * (1.5f + rnd.nextFloat() * 3f)
         a.vz += 5f + rnd.nextFloat() * 10f
         a.secondaryLeft = 3 + rnd.nextInt(3)

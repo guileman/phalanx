@@ -12,7 +12,7 @@ Capturas reales del juego en un celular, con lo que significa cada parte del HUD
   (**CONT 4500** = continuo a 4500 disparos/min), el giro del rotor, la cadencia medida, los disparos hechos,
   la velocidad de giro de la torreta, el cargador (1550 tiros) y la temperatura del cañón.
 - **Arriba al centro:** cinta de rumbo y caja con el rumbo actual (**025°**).
-- **Escalera de 5 en 5°** (10, 15, 20, 25…): está anclada al cielo real; al apuntar más arriba de 10° aparecen aviones.
+- **Escalera de 5 en 5°** (10, 15, 20, 25…): está anclada al cielo real.
 - **Recuadro rojo con "F-16 A01 ▼ATQ":** avión en **pasada de ataque** (viene directo hacia vos), con distancia,
   velocidad en nudos y vida (■).
 - **Círculo pequeño unido al avión por una línea:** la **retícula de adelanto**. Hay que apuntar **ahí**, no al avión,
@@ -60,8 +60,8 @@ aceleran mientras fija y pasan a un tono continuo cuando queda **FIJADO**.
 
 ## Preguntas frecuentes
 
-- **¿Por qué no aparecen aviones?** Encendé **AVIONES** y apuntá más de 10° sobre el horizonte. El primero aparece a
-  los 2 s y después cada 10 s.
+- **¿Por qué no aparecen aviones o carros?** Encendé **AVIONES** o **CARROS**. El primero aparece a los 2 s y después
+  cada 10 s (aviones) o 12 s (carros).
 - **No veo el avión:** buscá la **flecha roja** en el borde de la pantalla, que señala hacia dónde está.
 - **¿Cómo vuelvo a elegir arma?** Botón **MENÚ** o el gesto de atrás.
 - **El volumen:** con las teclas de volumen del celular.

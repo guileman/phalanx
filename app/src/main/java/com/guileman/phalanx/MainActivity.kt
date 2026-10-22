@@ -47,6 +47,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var aircraftButton: ControlButtonView
     private lateinit var modeButton: ControlButtonView
     private lateinit var viewButton: ControlButtonView
+    private lateinit var tankButton: ControlButtonView
     private lateinit var menuButton: ControlButtonView
     private var camera: Camera? = null
 
@@ -88,6 +89,7 @@ class MainActivity : AppCompatActivity() {
         aircraftButton = findViewById(R.id.aircraftButton)
         modeButton = findViewById(R.id.modeButton)
         viewButton = findViewById(R.id.viewButton)
+        tankButton = findViewById(R.id.tankButton)
         menuButton = findViewById(R.id.menuButton)
         // las teclas de volumen controlan el volumen del juego (sonido multimedia)
         volumeControlStream = AudioManager.STREAM_MUSIC
@@ -116,6 +118,11 @@ class MainActivity : AppCompatActivity() {
         aircraftButton.toggleMode = true
         aircraftButton.accent = blue
         aircraftButton.onPressChanged = { on -> hud.aircraft.enabled = on }
+
+        tankButton.label = "CARROS"
+        tankButton.toggleMode = true
+        tankButton.accent = android.graphics.Color.rgb(0xC8, 0x8A, 0x3C)
+        tankButton.onPressChanged = { on -> hud.aircraft.tanksEnabled = on }
 
         menuButton.label = "MENÚ"
         menuButton.accent = android.graphics.Color.rgb(0x9A, 0xA4, 0xA0)

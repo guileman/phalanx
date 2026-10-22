@@ -15,7 +15,7 @@ se ve como en la realidad.
 
 ## Menú de inicio
 
-Al abrir la app se elige el sistema (las ilustraciones son renders propios, `tools/render_weapons.py`):
+Al abrir la app se elige el sistema tocando su tarjeta (las ilustraciones son renders propios, `tools/render_weapons.py`):
 
 | Sistema | Real | Ficción |
 |---|---|---|
@@ -53,6 +53,7 @@ El botón **MENÚ** (o atrás) vuelve a la selección.
 | Botón **MODO** | Cicla 4500/min → 3000/min → ráfaga 60 → ráfaga 100 (en ráfaga, un toque dispara la ráfaga completa) |
 | Botón **RECARGA** | Recarga el cargador de 1550 tiros (4 s) |
 | Botón **AVIONES** (interruptor) | Activa los contactos aéreos (en los tres sistemas) |
+| Botón **CARROS** (interruptor) | Activa carros de combate sobre el suelo (en los tres sistemas) |
 | Teclas de volumen | Volumen del juego |
 
 ### Sonido (basado en el Phalanx real)
@@ -66,7 +67,7 @@ El botón **MENÚ** (o atrás) vuelve a la selección.
 
 ### Aviones
 
-Con **AVIONES** encendido y apuntando más de 10° sobre el horizonte, cada 10 segundos aparece un avión al azar:
+Con **AVIONES** encendido, cada 10 segundos aparece un avión al azar (si no está a la vista, seguí la flecha roja):
 **F-16, Mirage III, A-4 Skyhawk, MiG-29 o C-130 Hércules** (modelos 3D low-poly a escala real, en metros).
 Vuelan en coordenadas del mundo real, igual que los proyectiles, así que quedan fijos al entorno de la cámara.
 El HUD los marca con recuadro, distancia, velocidad y vida, y dibuja una **retícula de adelanto** (dónde apuntar
@@ -74,6 +75,12 @@ para que las balas lo intercepten, incluida la caída). Si están fuera de panta
 Los impactos se calculan en 3D; al quedarse sin vida el avión explota, cae girando con fuego y humo, y vuelve a
 explotar al tocar el suelo. Cerca de la mitad de los contactos hacen una **pasada de ataque**: vienen de frente
 en picada directo hacia el Phalanx, pasan a pocos metros (alarma "¡AMENAZA ENTRANTE!") y se van trepando. El sonido de las explosiones llega con el retardo de la velocidad del sonido.
+
+### Carros de combate
+
+Con **CARROS** encendido, cada 12 segundos aparece un carro sobre el suelo a 200–1200 m: **TAM, T-72, M1 Abrams o
+Leopard 2** (modelos 3D a escala). Cruzan de costado o avanzan hacia vos. Aguantan 12 impactos de 20 mm, 4 de 35 mm
+o un Javelin (que los ataca desde arriba en modo TOP). Al destruirse explotan, estalla su munición y quedan ardiendo.
 
 ### Explosiones y flash
 

@@ -12,10 +12,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -25,37 +23,18 @@ import androidx.core.view.WindowInsetsControllerCompat
 /** Menú de inicio: elegir el sistema de armas. */
 class MenuActivity : AppCompatActivity() {
 
-    private class Card(
-        val weapon: Weapon,
-        val image: Int,
-        val tagline: String,
-        val real: String,
-        val fiction: String,
-        val controls: String,
-    )
+    private class Card(val weapon: Weapon, val image: Int, val tagline: String, val blurb: String)
 
     private val cards = listOf(
-        Card(
-            Weapon.PHALANX, R.drawable.weapon_phalanx,
-            "Cañón rotativo de 20 mm · 4500 disparos/min",
-            "Defensa de buques contra misiles y aviones. En la realidad es automático: radar y computadora deciden cuándo disparar.",
-            "Acá lo apuntás y disparás vos.",
-            "FUEGO · RECARGA · MODO (cadencia / ráfagas) · AVIONES",
-        ),
-        Card(
-            Weapon.GEPARD, R.drawable.weapon_gepard,
-            "Antiaéreo doble de 35 mm · munición AHEAD",
-            "Blindado antiaéreo con dos cañones de 35 mm y radares de búsqueda y seguimiento. La munición AHEAD (del Skynex) estalla delante del blanco y larga una nube de fragmentos.",
-            "Apuntado manual y munición AHEAD montada en el Gepard.",
-            "FUEGO · RECARGA · MUNICIÓN (HE / AHEAD) · AVIONES",
-        ),
-        Card(
-            Weapon.JAVELIN, R.drawable.weapon_javelin,
+        Card(Weapon.PHALANX, R.drawable.weapon_phalanx,
+            "Cañón rotativo 20 mm · 4500/min",
+            "Defensa automática de buques. Acá la manejás vos."),
+        Card(Weapon.GEPARD, R.drawable.weapon_gepard,
+            "Antiaéreo doble 35 mm · AHEAD",
+            "Munición que estalla delante del blanco."),
+        Card(Weapon.JAVELIN, R.drawable.weapon_javelin,
             "Misil antitanque · dispara y olvida",
-            "Se fija el blanco en la pantalla de la unidad de comando y el misil vuela solo; en modo TOP sube y cae sobre el blanco desde arriba.",
-            "También puede fijar aviones.",
-            "LANZAR · WFOV/NFOV · TOP/DIR · DÍA/TÉRMICA · AVIONES",
-        ),
+            "Fijá el blanco y el misil cae desde arriba."),
     )
 
     private val green = Color.rgb(0x39, 0xFF, 0x6A)
@@ -89,16 +68,16 @@ class MenuActivity : AppCompatActivity() {
     }
 
     private fun buildUi(): View {
-        val root = FrameLayout(this).apply { setBackgroundColor(bg) }
-        val scroll = ScrollView(this).apply { isFillViewport = true }
+        // todo entra en una pantalla: título arriba y las tres tarjetas ocupando el resto
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(28f).toInt(), dp(14f).toInt(), dp(28f).toInt(), dp(14f).toInt())
+            setBackgroundColor(bg)
+            setPadding(dp(24f).toInt(), dp(10f).toInt(), dp(24f).toInt(), dp(12f).toInt())
         }
-        col.addView(text("SIMULADOR DE SISTEMAS DE ARMAS", 20f, green, bold = true))
-        col.addView(text("Realidad aumentada · elegí un sistema", 12f, Color.rgb(0x8C, 0xA8, 0x96)).apply {
-            setPadding(0, dp(2f).toInt(), 0, dp(10f).toInt())
-        })
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
+        header.addView(text("SISTEMAS DE ARMAS AR", 18f, green, bold = true))
+        header.addView(text("   tocá un sistema para entrar", 11f, Color.rgb(0x8C, 0xA8, 0x96)))
+        col.addView(header)
 
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         for ((i, c) in cards.withIndex()) {
@@ -106,32 +85,30 @@ class MenuActivity : AppCompatActivity() {
             if (i > 0) lp.marginStart = dp(12f).toInt()
             row.addView(card(c), lp)
         }
-        col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        col.addView(text("Todos los modelos e imágenes son ilustraciones propias del juego.", 10f, Color.rgb(0x5E, 0x72, 0x66)).apply {
-            setPadding(0, dp(10f).toInt(), 0, 0)
+        col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+            topMargin = dp(8f).toInt()
         })
-        scroll.addView(col)
-        root.addView(scroll)
-        return root
+        return col
     }
 
+    /** Tarjeta: toda la tarjeta es el botón de entrar. */
     private fun card(c: Card): View {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 setColor(panel)
                 cornerRadius = dp(10f)
-                setStroke(dp(1.5f).toInt(), Color.argb(140, 0x39, 0xFF, 0x6A))
+                setStroke(dp(1.5f).toInt(), Color.argb(150, 0x39, 0xFF, 0x6A))
             }
-            setPadding(dp(10f).toInt(), dp(10f).toInt(), dp(10f).toInt(), dp(10f).toInt())
+            setPadding(dp(8f).toInt(), dp(8f).toInt(), dp(8f).toInt(), dp(8f).toInt())
             isClickable = true
             isFocusable = true
-            contentDescription = "Jugar con ${c.weapon.title}"
+            contentDescription = "Entrar a ${c.weapon.title}"
             setOnClickListener { start(c.weapon) }
             setOnTouchListener { v, e ->
                 when (e.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> v.alpha = 0.75f
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.alpha = 1f
+                    MotionEvent.ACTION_DOWN -> { v.alpha = 0.7f; v.scaleX = 0.98f; v.scaleY = 0.98f }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { v.alpha = 1f; v.scaleX = 1f; v.scaleY = 1f }
                 }
                 false
             }
@@ -143,25 +120,17 @@ class MenuActivity : AppCompatActivity() {
             background = GradientDrawable().apply { cornerRadius = dp(6f); setColor(Color.BLACK) }
             contentDescription = c.weapon.title
         }
-        box.addView(img, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(118f).toInt()))
-        box.addView(text(c.weapon.title, 16f, green, bold = true).apply { setPadding(0, dp(8f).toInt(), 0, 0) })
-        box.addView(text(c.tagline, 11f, amber, bold = true).apply { setPadding(0, dp(2f).toInt(), 0, dp(6f).toInt()) })
-        box.addView(text(c.real, 10.5f, Color.rgb(0xC8, 0xD4, 0xCC)))
-        box.addView(text("Ficción: ${c.fiction}", 10.5f, Color.rgb(0x8C, 0xA8, 0x96)).apply {
-            setTypeface(Typeface.MONOSPACE, Typeface.ITALIC)
-            setPadding(0, dp(4f).toInt(), 0, dp(6f).toInt())
+        // la imagen se estira para ocupar el espacio que sobra
+        box.addView(img, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        val title = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        title.addView(text(c.weapon.title, 15f, green, bold = true),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        title.addView(text("▶", 15f, green, bold = true))
+        box.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(6f).toInt()
         })
-        box.addView(text(c.controls, 9.5f, Color.rgb(0x6F, 0x8A, 0x7A)))
-        // empuja el botón al fondo de la tarjeta
-        box.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
-        val btn = text("ENTRAR  ▶", 13f, bg, bold = true).apply {
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply { setColor(green); cornerRadius = dp(6f) }
-            setPadding(0, dp(8f).toInt(), 0, dp(8f).toInt())
-        }
-        box.addView(btn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = dp(8f).toInt()
-        })
+        box.addView(text(c.tagline, 10.5f, amber, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+        box.addView(text(c.blurb, 10.5f, Color.rgb(0xC8, 0xD4, 0xCC)).apply { maxLines = 2 })
         return box
     }
 

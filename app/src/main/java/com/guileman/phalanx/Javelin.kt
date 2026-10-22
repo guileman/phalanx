@@ -201,14 +201,15 @@ class JavelinSystem {
         // sale apuntando donde mira la CLU, levemente hacia arriba
         projector.deviceToWorld(r, 0f, 0.15f, -1f, tmp)
         val n = sqrt(tmp[0] * tmp[0] + tmp[1] * tmp[1] + tmp[2] * tmp[2])
-        val m = Missile(tgt, topAttack && tgt is ObjTarget, x, y, z,
+        val groundTgt = tgt is ObjTarget || (tgt is AirTarget && tgt.a.model.ground)
+        val m = Missile(tgt, topAttack && groundTgt, x, y, z,
             tmp[0] / n * EJECT_SPEED, tmp[1] / n * EJECT_SPEED, tmp[2] / n * EJECT_SPEED)
         tgt.position(m.last)
         m.hd0 = sqrt((m.last[0] - x) * (m.last[0] - x) + (m.last[1] - y) * (m.last[1] - y)).coerceAtLeast(1f)
         // TOP: trepa y cae desde arriba (hasta 150 m); DIR: trayectoria baja
         m.apex = if (m.top) (m.hd0 * 0.6f).coerceIn(12f, 150f) else (m.hd0 * 0.06f).coerceIn(1f, 50f)
         val d0 = sqrt(m.hd0 * m.hd0 + (m.last[2] - z) * (m.last[2] - z))
-        m.vmax = if (tgt is AirTarget) AIR_MAX_SPEED else (d0 * 1.2f).coerceIn(60f, MAX_SPEED)
+        m.vmax = if (!groundTgt) AIR_MAX_SPEED else (d0 * 1.2f).coerceIn(60f, MAX_SPEED)
         missiles += m
         launches++
         // lanzamiento suave: poca nube en el tubo
@@ -276,7 +277,7 @@ class JavelinSystem {
 
             // ---- espoleta ----
             val hitR = when (val tg = m.target) {
-                is AirTarget -> max(4f, tg.a.model.hitRadius * 0.9f)
+                is AirTarget -> if (tg.a.model.ground) 3f else max(4f, tg.a.model.hitRadius * 0.9f)
                 is ObjTarget -> 2.2f
             }
             val closing = dx * m.vx + dy * m.vy + dz * m.vz

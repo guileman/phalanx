@@ -483,6 +483,14 @@ class HudView @JvmOverloads constructor(
 
     /** Escalera de cabeceo anclada al mundo (como un HUD conformal de avión). */
     private fun drawPitchLadder(c: Canvas, att: Attitude) {
+        // no dibujar debajo de la cinta de rumbo (evita que los números se pisen)
+        c.save()
+        c.clipRect(0f, 74 * dp, width.toFloat(), height.toFloat())
+        drawPitchLadderInner(c, att)
+        c.restore()
+    }
+
+    private fun drawPitchLadderInner(c: Canvas, att: Attitude) {
         val az = att.azimuthDeg
         line.alpha = 200; lineDash.alpha = 200
         var havePrev = false
@@ -600,7 +608,8 @@ class HudView @JvmOverloads constructor(
                 if (a.onScreen && a.downAge < 3f) {
                     textSmall.color = alertColor
                     val rc = a.screenRect
-                    c.drawText("DERRIBADO", rc.centerX() - textSmall.measureText("DERRIBADO") / 2, rc.top - 10 * dp, textSmall)
+                    val word = if (a.model.ground) "DESTRUIDO" else "DERRIBADO"
+                    c.drawText(word, rc.centerX() - textSmall.measureText(word) / 2, rc.top - 10 * dp, textSmall)
                     textSmall.color = hudColor
                 }
                 continue
@@ -614,10 +623,10 @@ class HudView @JvmOverloads constructor(
                 val col = if (a.hp < a.model.hp) warnColor else alertColor
                 line.color = col; textSmall.color = col
                 brackets(c, rc, 8 * dp, line)
-                val kts = (a.speed * 1.944f).roundToInt()
+                val spd = if (a.model.ground) "${(a.speed * 3.6f).roundToInt()}km/h" else "${(a.speed * 1.944f).roundToInt()}kt"
                 val tag = if (a.attack && a.closest >= a.range - 1f) "  ▼ATQ" else ""
                 c.drawText("${a.model.name}  A%02d".format(a.id % 100) + tag, rc.left, rc.top - 18 * dp, textSmall)
-                c.drawText("%dm  %dkt  ".format(a.range.roundToInt(), kts) + "■".repeat(a.hp.coerceIn(0, 10)), rc.left, rc.top - 5 * dp, textSmall)
+                c.drawText("%dm  %s  ".format(a.range.roundToInt(), spd) + "■".repeat(a.hp.coerceIn(0, 12)), rc.left, rc.top - 5 * dp, textSmall)
 
                 // retícula de adelanto (solo cañones: el misil calcula su propia intercepción)
                 if (weapon.isGun) {
@@ -921,7 +930,7 @@ class HudView @JvmOverloads constructor(
         val x = width - pw - 10 * dp
         var y = 28 * dp
         val lh = 18 * dp
-        c.drawRect(x - 8 * dp, y - 16 * dp, x + pw, y + lh * 9.4f, panelBg)
+        c.drawRect(x - 8 * dp, y - 16 * dp, x + pw, y + lh * 11.4f, panelBg)
         text.color = warnColor
         c.drawText(weapon.title, x, y, text); y += lh * 1.2f
         text.color = hudColor
@@ -933,7 +942,11 @@ class HudView @JvmOverloads constructor(
         text.color = if (aircraft.enabled) warnColor else hudColor
         c.drawText("AVIONES   " + if (aircraft.enabled) "${aircraft.list.count { !it.down }} ACT" else "OFF", x, y, text); y += lh
         text.color = hudColor
-        c.drawText("DERRIBOS  ${aircraft.kills}", x, y, text); y += lh * 1.3f
+        c.drawText("DERRIBOS  ${aircraft.kills}", x, y, text); y += lh
+        text.color = if (aircraft.tanksEnabled) warnColor else hudColor
+        c.drawText("CARROS    " + if (aircraft.tanksEnabled) "${aircraft.list.count { it.model.ground && !it.down }} ACT" else "OFF", x, y, text); y += lh
+        text.color = hudColor
+        c.drawText("DESTRUID  ${aircraft.tankKills}", x, y, text); y += lh * 1.3f
         if (weapon == Weapon.JAVELIN) {
             val t = javelin.lockTarget
             if (t != null) {
@@ -981,21 +994,19 @@ class HudView @JvmOverloads constructor(
                 jv.locked -> msgs += "BLANCO FIJADO — LANZAR" to alertColor
             }
         }
-        if (aircraft.enabled) {
+        if (aircraft.enabled || aircraft.tanksEnabled) {
             val contact = aircraft.lastContact
             val threat = aircraft.incomingThreat()
             if (threat != null && threat.range < 2500f) {
                 val blink = (System.nanoTime() / 250_000_000L) % 2L == 0L
                 msgs += (if (blink) "¡AMENAZA ENTRANTE! ${threat.model.name} ${threat.range.roundToInt()}m" else " ") to alertColor
             } else if (contact != null && aircraft.contactMessageAge() < 2.5f) {
-                msgs += "CONTACTO AÉREO: $contact" to alertColor
-            } else if (att.elevationDeg <= AircraftManager.MIN_ELEVATION) {
-                msgs += "APUNTE AL CIELO (>10°) PARA CONTACTOS" to warnColor
-            } else {
-                msgs += "PRÓXIMO CONTACTO %ds".format(kotlin.math.ceil(aircraft.spawnTimer.toDouble()).toInt().coerceAtLeast(0)) to hudColor
+                msgs += contact to alertColor
             }
         }
-        var y = height / 2f + (if (weapon == Weapon.JAVELIN) height * 0.13f + 62 * dp else 70 * dp)
+        // Javelin: los mensajes van arriba de la ventana para no quedar tapados por los botones
+        var y = if (weapon == Weapon.JAVELIN) height / 2f - height * 0.13f - 14 * dp - (msgs.size - 1).coerceAtLeast(0) * 24 * dp
+                else height / 2f + 70 * dp
         for ((m, col) in msgs) {
             textBig.color = col
             c.drawText(m, width / 2f - textBig.measureText(m) / 2, y, textBig)
