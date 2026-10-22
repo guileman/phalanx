@@ -76,6 +76,9 @@ class Projector {
     /** Distancia focal en píxeles de pantalla. */
     var focalPx = 1000f
 
+    /** Posición de la cámara en el mundo (0 = el jugador; otra para vistas como la del dron). */
+    var ox = 0f; var oy = 0f; var oz = 0f
+
     /** Zoom óptico/digital de la cámara (multiplica la focal). */
     var zoom = 1f
         set(v) { field = v; focalPx = baseFocalPx * v }
@@ -90,8 +93,16 @@ class Projector {
         focalPx = baseFocalPx * zoom
     }
 
+    /** Vista auxiliar (sin cámara real detrás): tamaño y campo de visión horizontal directos. */
+    fun setSimple(viewW: Float, viewH: Float, horizontalFovRad: Double) {
+        width = viewW; height = viewH
+        baseFocalPx = (viewW / (2.0 * kotlin.math.tan(horizontalFovRad / 2.0))).toFloat()
+        focalPx = baseFocalPx * zoom
+    }
+
     /** Mundo -> pantalla. Devuelve false si el punto queda detrás de la cámara. */
-    fun worldToScreen(r: FloatArray, x: Float, y: Float, z: Float, out: FloatArray): Boolean {
+    fun worldToScreen(r: FloatArray, wx: Float, wy: Float, wz: Float, out: FloatArray): Boolean {
+        val x = wx - ox; val y = wy - oy; val z = wz - oz
         val dx = r[0] * x + r[3] * y + r[6] * z
         val dy = r[1] * x + r[4] * y + r[7] * z
         val dz = r[2] * x + r[5] * y + r[8] * z

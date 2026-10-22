@@ -27,14 +27,20 @@ class MenuActivity : AppCompatActivity() {
 
     private val cards = listOf(
         Card(Weapon.PHALANX, R.drawable.weapon_phalanx,
-            "Cañón rotativo 20 mm · 4500/min",
-            "Defensa automática de buques. Acá la manejás vos."),
+            "Rotativo 20 mm · 4500/min",
+            "Defensa de buques. Acá la manejás vos."),
         Card(Weapon.GEPARD, R.drawable.weapon_gepard,
-            "Antiaéreo doble 35 mm · AHEAD",
-            "Munición que estalla delante del blanco."),
+            "Antiaéreo doble 35 mm",
+            "Munición AHEAD que estalla adelante."),
         Card(Weapon.JAVELIN, R.drawable.weapon_javelin,
-            "Misil antitanque · dispara y olvida",
-            "Fijá el blanco y el misil cae desde arriba."),
+            "Misil · dispara y olvida",
+            "Fijá el blanco y cae desde arriba."),
+        Card(Weapon.TAM, R.drawable.weapon_tam,
+            "Tanque argentino · 105 mm",
+            "Láser, computadora de tiro y flechas."),
+        Card(Weapon.OBUS, R.drawable.weapon_obus,
+            "Obús argentino · 155 mm",
+            "Tiro en parábola, mapa y dron."),
     )
 
     private val green = Color.rgb(0x39, 0xFF, 0x6A)
@@ -72,7 +78,7 @@ class MenuActivity : AppCompatActivity() {
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(bg)
-            setPadding(dp(24f).toInt(), dp(10f).toInt(), dp(24f).toInt(), dp(12f).toInt())
+            setPadding(dp(16f).toInt(), dp(10f).toInt(), dp(16f).toInt(), dp(12f).toInt())
         }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
         header.addView(text("SISTEMAS DE ARMAS AR", 18f, green, bold = true))
@@ -82,7 +88,7 @@ class MenuActivity : AppCompatActivity() {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         for ((i, c) in cards.withIndex()) {
             val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
-            if (i > 0) lp.marginStart = dp(12f).toInt()
+            if (i > 0) lp.marginStart = dp(8f).toInt()
             row.addView(card(c), lp)
         }
         col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
@@ -123,14 +129,14 @@ class MenuActivity : AppCompatActivity() {
         // la imagen se estira para ocupar el espacio que sobra
         box.addView(img, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         val title = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        title.addView(text(c.weapon.title, 15f, green, bold = true),
+        title.addView(text(c.weapon.title, 12.5f, green, bold = true).apply { maxLines = 1 },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        title.addView(text("▶", 15f, green, bold = true))
+        title.addView(text("▶", 12.5f, green, bold = true))
         box.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(6f).toInt()
         })
-        box.addView(text(c.tagline, 10.5f, amber, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
-        box.addView(text(c.blurb, 10.5f, Color.rgb(0xC8, 0xD4, 0xCC)).apply { maxLines = 2 })
+        box.addView(text(c.tagline, 9.5f, amber, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+        box.addView(text(c.blurb, 9.5f, Color.rgb(0xC8, 0xD4, 0xCC)).apply { maxLines = 2 })
         return box
     }
 

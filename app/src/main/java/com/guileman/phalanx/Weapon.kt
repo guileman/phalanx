@@ -4,9 +4,16 @@ package com.guileman.phalanx
 enum class Weapon(val title: String) {
     PHALANX("PHALANX CIWS"),
     GEPARD("GEPARD 35 mm"),
-    JAVELIN("JAVELIN");
+    JAVELIN("JAVELIN"),
+    TAM("TAM 105 mm"),
+    OBUS("OBÚS CITER 155");
 
-    val isGun get() = this != JAVELIN
+    /** Cañón automático (usa GunController). */
+    val isGun get() = this == PHALANX || this == GEPARD
+    /** Cañón de tiro a tiro con carga manual (tanque u obús). */
+    val isCannon get() = this == TAM || this == OBUS
+    /** Dispara proyectiles balísticos (todo menos el misil). */
+    val usesBallistics get() = isGun || isCannon
 
     companion object {
         const val EXTRA = "weapon"

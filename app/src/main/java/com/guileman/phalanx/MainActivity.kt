@@ -109,6 +109,7 @@ class MainActivity : AppCompatActivity() {
         hud.detectorReady = detector?.isReady == true
         hud.onGunStateChanged = ::onGunState
         hud.onMissileLaunched = ::onMissileLaunched
+        hud.onCannonFired = ::onCannonFired
 
         val amber = android.graphics.Color.rgb(0xFF, 0xB0, 0x20)
         val blue = android.graphics.Color.rgb(0x39, 0xA8, 0xFF)
@@ -128,14 +129,55 @@ class MainActivity : AppCompatActivity() {
         menuButton.accent = android.graphics.Color.rgb(0x9A, 0xA4, 0xA0)
         menuButton.onPressChanged = { pressed -> if (pressed) finish() }
 
-        if (weapon == Weapon.JAVELIN) {
+        if (weapon.isCannon) {
+            val cn = CannonSystem(weapon)
+            hud.cannon = cn
+            fireButton.label = "FUEGO"
+            fireButton.onPressChanged = { pressed -> if (pressed) hud.fireCannon() }
+            if (weapon == Weapon.TAM) {
+                // telémetro láser
+                reloadButton.label = "LÁSER"
+                reloadButton.accent = android.graphics.Color.rgb(0xFF, 0x3B, 0x30)
+                reloadButton.onPressChanged = { pressed -> if (pressed) hud.lase() }
+                // munición: perforante (flecha) / explosiva
+                modeButton.label = cn.current.label
+                modeButton.accent = green
+                modeButton.onPressChanged = { pressed -> if (pressed) modeButton.label = cn.cycleAmmo().label }
+                // aumento de la mira
+                viewButton.visibility = android.view.View.VISIBLE
+                viewButton.label = "WFOV"
+                viewButton.accent = amber
+                viewButton.onPressChanged = { pressed -> if (pressed) toggleZoom(viewButton) }
+            } else {
+                // obús: carga de proyección
+                reloadButton.label = "CARGA ${cn.charge + 1}"
+                reloadButton.accent = amber
+                reloadButton.onPressChanged = { pressed -> if (pressed) reloadButton.label = "CARGA ${cn.cycleCharge()}" }
+                // mapa de tiro / dron observador
+                modeButton.label = "MAPA"
+                modeButton.accent = green
+                modeButton.onPressChanged = { pressed ->
+                    if (pressed) {
+                        hud.showDrone = !hud.showDrone
+                        modeButton.label = if (hud.showDrone) "DRON" else "MAPA"
+                    }
+                }
+                // blancos lejanos y casi quietos, en todo el frente; los carros arrancan activados
+                hud.aircraft.tankMinRange = 1000f
+                hud.aircraft.tankMaxRange = 3500f
+                hud.aircraft.tankSpeedScale = 0.15f
+                hud.aircraft.tankSpreadDeg = 70f
+                hud.aircraft.tanksEnabled = true
+                tankButton.isOn = true
+            }
+        } else if (weapon == Weapon.JAVELIN) {
             fireButton.label = "LANZAR"
             fireButton.onPressChanged = { pressed -> if (pressed) hud.fireJavelin() }
 
             // campo ancho / estrecho (zoom de la cámara)
             reloadButton.label = "WFOV"
             reloadButton.accent = amber
-            reloadButton.onPressChanged = { pressed -> if (pressed) toggleZoom() }
+            reloadButton.onPressChanged = { pressed -> if (pressed) toggleZoom(reloadButton) }
 
             // modo de ataque: desde arriba (TOP) o directo (DIR)
             modeButton.label = "TOP"
@@ -277,14 +319,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Javelin: alterna campo ancho (1x) y estrecho (hasta 3x, según la cámara). */
-    private fun toggleZoom() {
+    private fun toggleZoom(button: ControlButtonView) {
         val cam = camera ?: return
         val zs = cam.cameraInfo.zoomState.value
         val maxZ = zs?.maxZoomRatio ?: 1f
         val narrow = (zs?.zoomRatio ?: 1f) < 1.01f
         val target = if (narrow) minOf(3f, maxZ) else 1f
         cam.cameraControl.setZoomRatio(target)
-        reloadButton.label = if (target > 1.01f) "NFOV" else "WFOV"
+        button.label = if (target > 1.01f) "NFOV" else "WFOV"
+    }
+
+    /** Disparo del cañón pesado: golpe fuerte y destello. */
+    private fun onCannonFired() {
+        try {
+            vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 140, 60, 120), intArrayOf(0, 255, 0, 120), -1))
+        } catch (e: Exception) {
+            Log.w(TAG, "Vibración no disponible", e)
+        }
+        setTorch(true, force = true)
+        torchHandler.postDelayed({ setTorch(false, force = true) }, 110)
     }
 
     /** Lanzamiento del Javelin: golpe en la mano y destello del flash. */

@@ -359,6 +359,11 @@ class AircraftManager {
         private set
     var tankKills = 0
         private set
+    /** Distancias y movimiento de los carros (el obús usa blancos lejanos y casi quietos). */
+    var tankMinRange = -1f
+    var tankMaxRange = -1f
+    var tankSpeedScale = 1f
+    var tankSpreadDeg = 30f
 
     /** Último mensaje de contacto ("CONTACTO AÉREO: F-16", "CONTACTO TERRESTRE: TAM"). */
     var lastContact: String? = null
@@ -557,12 +562,14 @@ class AircraftManager {
     /** Carro de combate: aparece sobre el suelo, cruzando o acercándose al jugador. */
     private fun spawnTank(camAz: Float) {
         val model = AircraftModels.tanks[rnd.nextInt(AircraftModels.tanks.size)]
-        val range = model.minRange + rnd.nextFloat() * (model.maxRange - model.minRange)
+        val lo = if (tankMinRange > 0f) tankMinRange else model.minRange
+        val hi = if (tankMaxRange > 0f) tankMaxRange else model.maxRange
+        val range = lo + rnd.nextFloat() * (hi - lo)
         val side = if (rnd.nextBoolean()) 1f else -1f
-        val az = camAz + side * (4f + rnd.nextFloat() * 30f)
+        val az = camAz + side * (4f + rnd.nextFloat() * tankSpreadDeg)
         val azr = Math.toRadians(az.toDouble())
         val x = (sin(azr) * range).toFloat(); val y = (cos(azr) * range).toFloat()
-        val spd = model.speed * (0.7f + rnd.nextFloat() * 0.4f)
+        val spd = model.speed * (0.7f + rnd.nextFloat() * 0.4f) * tankSpeedScale
         var dx: Float; var dy: Float
         if (rnd.nextBoolean()) {
             // avanza hacia el jugador (pasa a un costado)
@@ -575,7 +582,9 @@ class AircraftManager {
         }
         val n = sqrt(dx * dx + dy * dy)
         dx /= n; dy /= n
-        val a = Aircraft(nextId++, model, x, y, GROUND_Z, dx * spd, dy * spd, 0f)
+        // velocidad 0 conserva el rumbo inicial gracias a un empujón mínimo
+        val v = max(spd, 0.002f)
+        val a = Aircraft(nextId++, model, x, y, GROUND_Z, dx * v, dy * v, 0f)
         a.updateBasis()
         list += a
         lastContact = "CONTACTO TERRESTRE: " + model.name
@@ -606,10 +615,17 @@ class AircraftManager {
                 val t = if (l2 > 1e-6f) (-(q0x * dx + q0y * dy + q0z * dz) / l2).coerceIn(0f, 1f) else 0f
                 val cx = q0x + dx * t; val cy = q0y + dy * t; val cz = q0z + dz * t
                 if (cx * cx + cy * cy + cz * cz < rr * rr) {
+                    val k = b.kind[i]
+                    val dmg = if (b.dmg[i] > 0) b.dmg[i] else damage
                     b.kill(i)
                     hits++
-                    a.hp -= damage
-                    effects.explode(a.x + cx * 0.5f, a.y + cy * 0.5f, a.z + cz * 0.5f, (1.6f + rnd.nextFloat()) * (if (damage > 1) 1.6f else 1f), 0.45f)
+                    a.hp -= dmg
+                    if (Ballistics.heavy(k)) {
+                        // granada de tanque / obús: el HUD procesa la explosión (y el daño en área)
+                        b.addImpact(a.x + cx * 0.5f, a.y + cy * 0.5f, a.z + cz * 0.5f, k)
+                    } else {
+                        effects.explode(a.x + cx * 0.5f, a.y + cy * 0.5f, a.z + cz * 0.5f, (1.6f + rnd.nextFloat()) * (if (dmg > 1) 1.6f else 1f), 0.45f)
+                    }
                     if (nowNanos - a.lastHitSound > 120_000_000L) {
                         a.lastHitSound = nowNanos
                         sound?.explosion(a.range, 0.15f)
@@ -667,13 +683,17 @@ class AircraftManager {
     private var order = IntArray(0)
     private val p = FloatArray(2)
 
-    fun draw(c: Canvas, projector: Projector, r: FloatArray) {
-        // los más lejanos primero
-        list.sortByDescending { it.range }
-        for (a in list) drawOne(c, projector, r, a)
+    /**
+     * @param updateScreen guarda el recuadro en pantalla de cada avión (false para vistas secundarias, p. ej. el dron)
+     */
+    fun draw(c: Canvas, projector: Projector, r: FloatArray, updateScreen: Boolean = true) {
+        // los más lejanos primero (respecto de la cámara que dibuja)
+        val ox = projector.ox; val oy = projector.oy; val oz = projector.oz
+        list.sortByDescending { (it.x - ox) * (it.x - ox) + (it.y - oy) * (it.y - oy) + (it.z - oz) * (it.z - oz) }
+        for (a in list) drawOne(c, projector, r, a, updateScreen)
     }
 
-    private fun drawOne(c: Canvas, projector: Projector, r: FloatArray, a: Aircraft) {
+    private fun drawOne(c: Canvas, projector: Projector, r: FloatArray, a: Aircraft, updateScreen: Boolean) {
         val mesh = a.model.mesh
         val n = mesh.polys.size
         if (depth.size < n) { depth = FloatArray(n); order = IntArray(n) }
@@ -688,7 +708,8 @@ class AircraftManager {
             val m = pts.size / 3
             for (i in 0 until m) { sx += pts[3 * i]; sy += pts[3 * i + 1]; sz += pts[3 * i + 2] }
             a.toWorld(sx / m, sy / m, sz / m, tmp)
-            depth[k] = tmp[0] * tmp[0] + tmp[1] * tmp[1] + tmp[2] * tmp[2]
+            val ddx = tmp[0] - projector.ox; val ddy = tmp[1] - projector.oy; val ddz = tmp[2] - projector.oz
+            depth[k] = ddx * ddx + ddy * ddy + ddz * ddz
             order[k] = k
         }
         // ordenamiento por inserción (pocos polígonos)
@@ -699,7 +720,7 @@ class AircraftManager {
             order[j + 1] = o
         }
 
-        val dist = a.range
+        val dist = sqrt((a.x - projector.ox) * (a.x - projector.ox) + (a.y - projector.oy) * (a.y - projector.oy) + (a.z - projector.oz) * (a.z - projector.oz))
         val haze = min(0.55f, dist / 5000f)
         for (idx in 0 until n) {
             val k = order[idx]
@@ -748,6 +769,7 @@ class AircraftManager {
             polyPaint.color = Color.rgb(60, 64, 70)
             c.drawCircle((minX + maxX) / 2, (minY + maxY) / 2, 1.8f, polyPaint)
         }
+        if (!updateScreen) return
         a.onScreen = anyVisible && maxX > 0 && minX < projector.width && maxY > 0 && minY < projector.height
         if (anyVisible) a.screenRect.set(minX, minY, maxX, maxY)
     }

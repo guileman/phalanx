@@ -132,10 +132,11 @@ class Effects(res: Resources) {
             }
         }
         if (list.isEmpty()) return
-        list.sortByDescending { it.x * it.x + it.y * it.y + it.z * it.z }
+        val ox = projector.ox; val oy = projector.oy; val oz = projector.oz
+        list.sortByDescending { (it.x - ox) * (it.x - ox) + (it.y - oy) * (it.y - oy) + (it.z - oz) * (it.z - oz) }
         for (f in list) {
             if (!projector.worldToScreen(r, f.x, f.y, f.z, p)) continue
-            val dist = kotlin.math.sqrt(f.x * f.x + f.y * f.y + f.z * f.z).coerceAtLeast(0.5f)
+            val dist = kotlin.math.sqrt((f.x - ox) * (f.x - ox) + (f.y - oy) * (f.y - oy) + (f.z - oz) * (f.z - oz)).coerceAtLeast(0.5f)
             val t = f.age / f.life
             if (f.smoke) {
                 val radiusM = f.radius * (1f + (f.grow - 1f) * t)

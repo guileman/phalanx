@@ -241,3 +241,55 @@ render(s, eye=None, target=(-118, 22, 0.78), fov_deg=30,
        bg=[(84, 96, 78), (24, 30, 24)], name="weapon_javelin",
        glow=[([-0.27, -0.23, 1.07], 0.02, (90, 160, 255, 160))])
 print("ok")
+
+# ===================== TAM =====================
+s = Scene()
+tan = (128, 118, 84); tan2 = (104, 96, 68); trackc = (40, 40, 38); gunc = (88, 82, 60)
+L, Wd, TH = 6.8, 3.1, 1.75
+for side in (-1, 1):
+    y = side * (Wd / 2 - 0.32)
+    s.box([0, y, 0.48], [L - 0.3, 0.64, 0.95], trackc)
+    for x in np.linspace(-2.7, 2.6, 6):
+        s.disc([x, y + side * 0.33, 0.45], 0.38, [0, side, 0], (70, 70, 64), n=14)
+    s.box([0, side * (Wd / 2 - 0.3), 1.0], [L - 0.5, 0.7, 0.1], tan2)
+yy = Wd / 2 - 0.62
+s.wedge([[-L / 2, -yy, 0.45], [-L / 2, -yy, TH], [-L / 2, yy, 0.45], [-L / 2, yy, TH],
+         [L / 2, -yy, 0.55], [L / 2 - 1.4, -yy, TH], [L / 2, yy, 0.55], [L / 2 - 1.4, yy, TH]], tan)
+s.box([-0.25, 0, TH - 0.17], [L - 1.7, Wd - 0.1, 0.35], tan)
+# torreta atrás (chasis tipo Marder)
+s.wedge([[-2.8, -1.3, TH], [-2.8, -1.25, 2.5], [-2.8, 1.3, TH], [-2.8, 1.25, 2.5],
+         [0.4, -1.2, TH], [-0.2, -1.0, 2.5], [0.4, 1.2, TH], [-0.2, 1.0, 2.5]], tan2)
+s.cyl([0.2, 0, 2.15], [5.6, 0, 2.15], 0.08, gunc, n=10)
+s.cyl([2.6, 0, 2.15], [3.1, 0, 2.15], 0.14, gunc, n=10)        # evacuador de humos
+s.box([-1.6, 0.6, 2.6], [0.6, 0.5, 0.25], tan2)                 # escotilla
+render(s, eye=None, target=(-36, 16, 0.62), fov_deg=30,
+       bg=[(92, 104, 96), (26, 30, 24)], name="weapon_tam",
+       ground=(0.0, None, (70, 110, 70)))
+
+# ===================== OBÚS CITER 155 =====================
+s = Scene()
+olive = (92, 100, 72); olive2 = (74, 80, 58); dark = (44, 46, 42)
+el = math.radians(32)
+def tube(x):
+    return [x * math.cos(el), 0, 1.45 + x * math.sin(el)]
+# cureña y escudo
+s.box([0, 0, 1.25], [1.6, 1.3, 0.5], olive2)
+s.wedge([[0.55, -1.25, 0.9], [0.55, -1.15, 2.2], [0.55, 1.25, 0.9], [0.55, 1.15, 2.2],
+         [0.68, -1.25, 0.9], [0.68, -1.15, 2.2], [0.68, 1.25, 0.9], [0.68, 1.15, 2.2]], olive)
+# ruedas
+for side in (-1, 1):
+    s.cyl([0, side * 0.95, 0.55], [0, side * 1.35, 0.55], 0.55, dark, n=18)
+    s.disc([0, side * 1.36, 0.55], 0.3, [0, side, 0], (90, 90, 84), n=12)
+# tubo largo (L33) con freno de boca
+s.cyl(tube(-1.6), tube(0.6), 0.32, olive2, n=14)              # cuna / recuperador
+s.cyl(tube(0.5), tube(6.3), 0.12, olive, n=12)
+s.cyl(tube(6.1), tube(6.8), 0.22, dark, n=12)
+# mástiles (flechas) abiertos hacia atrás
+for side in (-1, 1):
+    s.wedge([[-0.4, side * 0.4 - 0.12, 0.9], [-0.4, side * 0.4 - 0.12, 1.15], [-0.4, side * 0.4 + 0.12, 0.9], [-0.4, side * 0.4 + 0.12, 1.15],
+             [-4.6, side * 1.9 - 0.12, 0.1], [-4.6, side * 1.9 - 0.12, 0.3], [-4.6, side * 1.9 + 0.12, 0.1], [-4.6, side * 1.9 + 0.12, 0.3]], olive)
+    s.box([-4.7, side * 1.95, 0.08], [0.5, 0.6, 0.12], dark)        # rejas de anclaje
+render(s, eye=None, target=(-58, 14, 0.6), fov_deg=30,
+       bg=[(104, 118, 128), (30, 34, 28)], name="weapon_obus",
+       ground=(0.0, None, (70, 110, 70)))
+print("ok2")

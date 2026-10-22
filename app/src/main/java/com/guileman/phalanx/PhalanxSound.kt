@@ -54,7 +54,7 @@ class PhalanxSound(private val gun: GunController, private val weapon: Weapon = 
     /** Volumen maestro 0..1 (el volumen general se maneja con las teclas del celular) */
     @Volatile var volume = 0.9f
 
-    private class Boom(val delaySamples: Int, val gain: Float, val size: Float)
+    private class Boom(val delaySamples: Int, val gain: Float, val size: Float, val cannon: Boolean = false)
     private val booms = java.util.concurrent.ConcurrentLinkedQueue<Boom>()
 
     /**
@@ -68,6 +68,19 @@ class PhalanxSound(private val gun: GunController, private val weapon: Weapon = 
         val gain = (1f / (1f + distance / 250f)).coerceIn(0.12f, 1f) * (0.5f + 0.5f * size)
         booms.add(Boom((delay * sampleRate).toInt(), gain, size.coerceIn(0f, 1f)))
     }
+
+    /** Disparo de cañón pesado (TAM / obús): estampido seco y cola larga. [size] 0..1 */
+    fun cannonShot(size: Float) {
+        booms.add(Boom(0, 1f, size.coerceIn(0f, 1f), cannon = true))
+    }
+
+    // ---- otros eventos ----
+    private val evClank = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val evBeep = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** Cierre de la recámara (cañón cargado). */
+    fun clank() = evClank.set(true)
+    /** Pitido corto (aviso de impacto inminente, láser). */
+    fun beep() = evBeep.set(true)
 
     @Volatile private var sampleRate = 48000
 
@@ -170,7 +183,7 @@ class PhalanxSound(private val gun: GunController, private val weapon: Weapon = 
         val scrapeSvf = Svf()
 
         // voces de explosión
-        class Voice { var wait = 0; var t = 0f; var gain = 0f; var size = 0f; var active = false
+        class Voice { var wait = 0; var t = 0f; var gain = 0f; var size = 0f; var active = false; var cannon = false
             val lp = OnePoleLP(0.05f); val lp2 = OnePoleLP(0.02f); var ph = 0.0 }
         val voices = Array(8) { Voice() }
 
@@ -182,6 +195,10 @@ class PhalanxSound(private val gun: GunController, private val weapon: Weapon = 
         val gBodyLp = OnePoleLP(0.035f)
         val gClankSvf = Svf()
         val gEnvDecay = exp(-1f / (0.075f * srf))
+
+        // cierre de recámara / pitido
+        var clankT = -1f; val clankSvf = Svf(); val clankSvf2 = Svf()
+        var beepT = -1f; var beepPh = 0.0
 
         // Javelin
         var coolT = -1f; val coolSvf = Svf()
@@ -222,8 +239,10 @@ class PhalanxSound(private val gun: GunController, private val weapon: Weapon = 
                 }
                 val firing = state == GunState.FIRING
                 val braking = state == GunState.SPIN_DOWN && gun.aborted
-                val slewTarget = if (weapon == Weapon.JAVELIN) 0f else slewRate
+                val slewTarget = if (weapon == Weapon.JAVELIN || weapon == Weapon.OBUS) 0f else slewRate
                 if (evCool.getAndSet(false)) coolT = 0f
+                if (evClank.getAndSet(false)) clankT = 0f
+                if (evBeep.getAndSet(false)) { beepT = 0f; beepPh = 0.0 }
                 if (evLaunch.getAndSet(false)) { launchT = 0f; launchPh = 0.0 }
                 if (evIgnite.getAndSet(false)) igniteT = 0f
                 if (evDenied.getAndSet(false)) { deniedT = 0f; deniedPh = 0.0 }
@@ -234,6 +253,7 @@ class PhalanxSound(private val gun: GunController, private val weapon: Weapon = 
                     val b = booms.poll() ?: break
                     val v = voices.firstOrNull { !it.active } ?: voices.minByOrNull { it.gain * (1f - it.t) } ?: break
                     v.wait = b.delaySamples; v.t = 0f; v.gain = b.gain; v.size = b.size; v.active = true; v.ph = 0.0
+                    v.cannon = b.cannon
                     v.lp.a = 0.03f + 0.06f * (1f - b.size)
                 }
 
@@ -327,6 +347,22 @@ class PhalanxSound(private val gun: GunController, private val weapon: Weapon = 
                         if (gClankT > 0.12f) gClankT = -1f
                     }
 
+                    // ---------- cierre de recámara y pitido ----------
+                    if (clankT >= 0f) {
+                        val h1 = if (clankT < 0.08f) clankSvf.bandpass(noise, 2100f, 9f, srf) * exp(-clankT * 60f) else 0f
+                        val t2 = clankT - 0.13f
+                        val h2 = if (t2 > 0f) clankSvf2.bandpass(noise, 1250f, 7f, srf) * exp(-t2 * 45f) else 0f
+                        s += (h1 * 1.4f + h2 * 1.8f)
+                        clankT += dt
+                        if (clankT > 0.35f) clankT = -1f
+                    }
+                    if (beepT >= 0f) {
+                        beepPh += 1900.0 / sr
+                        if (beepT < 0.07f) s += (if (sin(2.0 * PI * beepPh) > 0) 1f else -1f) * 0.06f
+                        beepT += dt
+                        if (beepT > 0.08f) beepT = -1f
+                    }
+
                     // ---------- Javelin ----------
                     if (coolT >= 0f) {
                         // siseo del gas que enfría el buscador
@@ -411,12 +447,12 @@ class PhalanxSound(private val gun: GunController, private val weapon: Weapon = 
                         if (!v.active) continue
                         if (v.wait > 0) { v.wait--; continue }
                         val t = v.t
-                        val len = 0.6f + 1.2f * v.size
+                        val len = if (v.cannon) 1.0f + 2.0f * v.size else 0.6f + 1.2f * v.size
                         val env = (if (t < 0.004f) t / 0.004f else exp(-(t - 0.004f) * 5.5f / len))
                         val rumble = v.lp2.process(v.lp.process(noise) * 6f) * 3f
                         v.ph += (55.0 - 25.0 * v.size) * (1.0 - 0.5 * t) / sr
-                        val thump = sin(2.0 * PI * v.ph).toFloat() * exp(-t * 9f)
-                        val crack = noise * exp(-t * 60f) * 0.6f
+                        val thump = sin(2.0 * PI * v.ph).toFloat() * exp(-t * (if (v.cannon) 5f else 9f)) * (if (v.cannon) 1.6f else 1f)
+                        val crack = noise * exp(-t * (if (v.cannon) 30f else 60f)) * (if (v.cannon) 1.6f else 0.6f)
                         s += (rumble + thump * 0.9f + crack) * env * v.gain
                         v.t += dt
                         if (v.t > len * 1.6f) v.active = false
