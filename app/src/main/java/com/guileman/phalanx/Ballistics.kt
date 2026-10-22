@@ -19,8 +19,6 @@ class Ballistics(capacity: Int = 600) {
         const val DRAG = 0.12f                 // 1/s, arrastre simplificado
         const val LIFETIME = 3.2f              // s
         const val DISPERSION_RAD = 0.0028f     // ~2.8 mrad de dispersión
-        /** Boca del cañón en coordenadas del dispositivo: un poco abajo y a la derecha de la cámara. */
-        val MUZZLE_OFFSET = floatArrayOf(0.12f, -0.35f, -0.25f)
     }
 
     val cap = capacity
@@ -34,6 +32,15 @@ class Ballistics(capacity: Int = 600) {
     val prevDist = FloatArray(cap)
     val alive = BooleanArray(cap)
     val hit = BooleanArray(cap)
+    /** Distancia de estallido programada (0 = espoleta de contacto). */
+    val fuse = FloatArray(cap)
+    /** Proyectil grueso (35 mm): trazadora más ancha. */
+    val big = BooleanArray(cap)
+
+    /** Estallidos AHEAD de este paso: x, y, z, vx, vy, vz por cada uno. */
+    val bursts = FloatArray(6 * 64)
+    var burstCount = 0
+        private set
     var count = 0
         private set
 
@@ -46,7 +53,10 @@ class Ballistics(capacity: Int = 600) {
      * @param r matriz de orientación actual
      * @param timeAhead segundos que hay que adelantar la bala (para repartir varios disparos dentro de un mismo frame)
      */
-    fun spawn(projector: Projector, r: FloatArray, timeAhead: Float) {
+    fun spawn(
+        projector: Projector, r: FloatArray, timeAhead: Float,
+        muzzle: FloatArray, speed: Float = MUZZLE_VELOCITY, fuseDist: Float = 0f, heavy: Boolean = false,
+    ) {
         val i = next
         next = (next + 1) % cap
         if (!alive[i]) count++
@@ -56,11 +66,11 @@ class Ballistics(capacity: Int = 600) {
         val gy = gaussian() * DISPERSION_RAD
         projector.deviceToWorld(r, gx, gy, -1f, tmp)
         val n = sqrt(tmp[0] * tmp[0] + tmp[1] * tmp[1] + tmp[2] * tmp[2])
-        vx[i] = tmp[0] / n * MUZZLE_VELOCITY
-        vy[i] = tmp[1] / n * MUZZLE_VELOCITY
-        vz[i] = tmp[2] / n * MUZZLE_VELOCITY
+        vx[i] = tmp[0] / n * speed
+        vy[i] = tmp[1] / n * speed
+        vz[i] = tmp[2] / n * speed
 
-        projector.deviceToWorld(r, MUZZLE_OFFSET[0], MUZZLE_OFFSET[1], MUZZLE_OFFSET[2], tmp)
+        projector.deviceToWorld(r, muzzle[0], muzzle[1], muzzle[2], tmp)
         x[i] = tmp[0]; y[i] = tmp[1]; z[i] = tmp[2]
         px[i] = x[i]; py[i] = y[i]; pz[i] = z[i]
         age[i] = 0f
@@ -68,13 +78,27 @@ class Ballistics(capacity: Int = 600) {
         prevDist[i] = 0f
         alive[i] = true
         hit[i] = false
+        fuse[i] = fuseDist
+        big[i] = heavy
         if (timeAhead > 0f) step(i, timeAhead)
     }
 
     fun update(dt: Float) {
+        burstCount = 0
         for (i in 0 until cap) {
             if (!alive[i]) continue
             step(i, dt)
+            if (fuse[i] > 0f && dist[i] >= fuse[i]) {
+                // espoleta programada: estalla y libera la nube de fragmentos
+                if (burstCount < bursts.size / 6) {
+                    val k = burstCount * 6
+                    bursts[k] = x[i]; bursts[k + 1] = y[i]; bursts[k + 2] = z[i]
+                    bursts[k + 3] = vx[i]; bursts[k + 4] = vy[i]; bursts[k + 5] = vz[i]
+                    burstCount++
+                }
+                alive[i] = false; count--
+                continue
+            }
             if (age[i] > LIFETIME) { alive[i] = false; count-- }
         }
     }

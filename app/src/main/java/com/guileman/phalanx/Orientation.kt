@@ -76,12 +76,18 @@ class Projector {
     /** Distancia focal en píxeles de pantalla. */
     var focalPx = 1000f
 
+    /** Zoom óptico/digital de la cámara (multiplica la focal). */
+    var zoom = 1f
+        set(v) { field = v; focalPx = baseFocalPx * v }
+    private var baseFocalPx = 1000f
+
     fun setFov(viewW: Int, viewH: Int, horizontalFovRad: Double, previewAspect: Float = 16f / 9f) {
         width = viewW.toFloat()
         height = viewH.toFloat()
         // PreviewView en FILL_CENTER: el preview se escala hasta cubrir toda la vista
         val displayedPreviewWidth = maxOf(width, height * previewAspect)
-        focalPx = (displayedPreviewWidth / (2.0 * kotlin.math.tan(horizontalFovRad / 2.0))).toFloat()
+        baseFocalPx = (displayedPreviewWidth / (2.0 * kotlin.math.tan(horizontalFovRad / 2.0))).toFloat()
+        focalPx = baseFocalPx * zoom
     }
 
     /** Mundo -> pantalla. Devuelve false si el punto queda detrás de la cámara. */

@@ -59,6 +59,34 @@ class Effects(res: Resources) {
     ) { var age = 0f }
 
     private val list = ArrayList<Fx>()
+
+    /** Nube de fragmentos AHEAD: cono hacia adelante desde el punto de estallido. */
+    private class Frag(val x: Float, val y: Float, val z: Float, val dirs: FloatArray, val n: Int) { var age = 0f }
+    private val frags = ArrayList<Frag>()
+    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
+    private val q = FloatArray(2)
+
+    /**
+     * Estallido AHEAD en (x,y,z) con velocidad (vx,vy,vz): destello, humito y un cono de fragmentos
+     * (~10°) que avanza unos 40 m.
+     */
+    fun flak(x: Float, y: Float, z: Float, vx: Float, vy: Float, vz: Float) {
+        explode(x, y, z, 1.4f, 0.35f)
+        smoke(x, y, z, 2.2f, 2.2f, 0.55f)
+        if (frags.size > 40) return
+        val sp = kotlin.math.sqrt(vx * vx + vy * vy + vz * vz).coerceAtLeast(1f)
+        val ux = vx / sp; val uy = vy / sp; val uz = vz / sp
+        val n = 18
+        val dirs = FloatArray(n * 3)
+        for (k in 0 until n) {
+            val ax = ux + (rnd.nextFloat() - 0.5f) * 0.34f
+            val ay = uy + (rnd.nextFloat() - 0.5f) * 0.34f
+            val az = uz + (rnd.nextFloat() - 0.5f) * 0.34f
+            val l = kotlin.math.sqrt(ax * ax + ay * ay + az * az)
+            dirs[3 * k] = ax / l; dirs[3 * k + 1] = ay / l; dirs[3 * k + 2] = az / l
+        }
+        frags += Frag(x, y, z, dirs, n)
+    }
     private val p = FloatArray(2)
 
     val count get() = list.size
@@ -78,6 +106,8 @@ class Effects(res: Resources) {
     }
 
     fun update(dt: Float) {
+        val fi = frags.iterator()
+        while (fi.hasNext()) { val f = fi.next(); f.age += dt; if (f.age > 0.12f) fi.remove() }
         val it = list.iterator()
         while (it.hasNext()) {
             val f = it.next()
@@ -89,6 +119,18 @@ class Effects(res: Resources) {
 
     /** Dibuja de lejos a cerca. Las coordenadas del mundo se proyectan con la orientación actual. */
     fun draw(c: Canvas, projector: Projector, r: FloatArray) {
+        for (f in frags) {
+            val t = f.age / 0.12f
+            val d0 = 40f * t * 0.6f; val d1 = 40f * t
+            linePaint.color = android.graphics.Color.argb((230 * (1 - t)).toInt(), 255, 210, 120)
+            linePaint.strokeWidth = 2.2f
+            for (k in 0 until f.n) {
+                val dx = f.dirs[3 * k]; val dy = f.dirs[3 * k + 1]; val dz = f.dirs[3 * k + 2]
+                if (!projector.worldToScreen(r, f.x + dx * d0, f.y + dy * d0, f.z + dz * d0, p)) continue
+                if (!projector.worldToScreen(r, f.x + dx * d1, f.y + dy * d1, f.z + dz * d1, q)) continue
+                c.drawLine(p[0], p[1], q[0], q[1], linePaint)
+            }
+        }
         if (list.isEmpty()) return
         list.sortByDescending { it.x * it.x + it.y * it.y + it.z * it.z }
         for (f in list) {

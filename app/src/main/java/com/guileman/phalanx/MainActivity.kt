@@ -46,9 +46,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var reloadButton: ControlButtonView
     private lateinit var aircraftButton: ControlButtonView
     private lateinit var modeButton: ControlButtonView
+    private lateinit var viewButton: ControlButtonView
+    private lateinit var menuButton: ControlButtonView
     private var camera: Camera? = null
 
-    private val gun = GunController()
+    private lateinit var weapon: Weapon
+    private lateinit var gun: GunController
     private lateinit var orientation: OrientationTracker
     private lateinit var sound: PhalanxSound
     private var detector: TargetDetector? = null
@@ -73,6 +76,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        weapon = Weapon.from(intent.getStringExtra(Weapon.EXTRA))
+        gun = GunController(if (weapon == Weapon.GEPARD) GunConfig.GEPARD else GunConfig.PHALANX)
         setContentView(R.layout.activity_main)
         goFullscreen()
 
@@ -82,42 +87,83 @@ class MainActivity : AppCompatActivity() {
         reloadButton = findViewById(R.id.reloadButton)
         aircraftButton = findViewById(R.id.aircraftButton)
         modeButton = findViewById(R.id.modeButton)
+        viewButton = findViewById(R.id.viewButton)
+        menuButton = findViewById(R.id.menuButton)
         // las teclas de volumen controlan el volumen del juego (sonido multimedia)
         volumeControlStream = AudioManager.STREAM_MUSIC
         previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
         previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE // TextureView: permite aplicar desenfoque
 
         orientation = OrientationTracker(this)
-        sound = PhalanxSound(gun)
+        sound = PhalanxSound(gun, weapon)
         analysisExecutor = Executors.newSingleThreadExecutor()
         detector = TargetDetector(this, orientation) { frame -> hud.submitDetections(frame) }
 
+        hud.weapon = weapon
         hud.gun = gun
         hud.orientation = orientation
         hud.cameraView = previewView
         hud.sound = sound
         hud.detectorReady = detector?.isReady == true
         hud.onGunStateChanged = ::onGunState
+        hud.onMissileLaunched = ::onMissileLaunched
 
-        fireButton.label = "FUEGO"
-        fireButton.onPressChanged = { pressed -> gun.trigger = pressed }
-
-        reloadButton.label = "RECARGA"
-        reloadButton.accent = android.graphics.Color.rgb(0xFF, 0xB0, 0x20)
-        reloadButton.onPressChanged = { pressed -> if (pressed) gun.requestReload() }
+        val amber = android.graphics.Color.rgb(0xFF, 0xB0, 0x20)
+        val blue = android.graphics.Color.rgb(0x39, 0xA8, 0xFF)
+        val green = android.graphics.Color.rgb(0x39, 0xFF, 0x6A)
 
         aircraftButton.label = "AVIONES"
         aircraftButton.toggleMode = true
-        aircraftButton.accent = android.graphics.Color.rgb(0x39, 0xA8, 0xFF)
+        aircraftButton.accent = blue
         aircraftButton.onPressChanged = { on -> hud.aircraft.enabled = on }
 
-        // modo de fuego: 4500 → 3000 → ráfaga 60 → ráfaga 100
-        modeButton.label = gun.mode.label
-        modeButton.accent = android.graphics.Color.rgb(0x39, 0xFF, 0x6A)
-        modeButton.onPressChanged = { pressed ->
-            if (pressed) {
-                gun.mode = gun.mode.next()
-                modeButton.label = gun.mode.label
+        menuButton.label = "MENÚ"
+        menuButton.accent = android.graphics.Color.rgb(0x9A, 0xA4, 0xA0)
+        menuButton.onPressChanged = { pressed -> if (pressed) finish() }
+
+        if (weapon == Weapon.JAVELIN) {
+            fireButton.label = "LANZAR"
+            fireButton.onPressChanged = { pressed -> if (pressed) hud.fireJavelin() }
+
+            // campo ancho / estrecho (zoom de la cámara)
+            reloadButton.label = "WFOV"
+            reloadButton.accent = amber
+            reloadButton.onPressChanged = { pressed -> if (pressed) toggleZoom() }
+
+            // modo de ataque: desde arriba (TOP) o directo (DIR)
+            modeButton.label = "TOP"
+            modeButton.accent = green
+            modeButton.onPressChanged = { pressed ->
+                if (pressed) {
+                    hud.javelin.topAttack = !hud.javelin.topAttack
+                    modeButton.label = if (hud.javelin.topAttack) "TOP" else "DIR"
+                }
+            }
+
+            // visor de día / térmico
+            viewButton.visibility = android.view.View.VISIBLE
+            viewButton.label = "DÍA"
+            viewButton.accent = android.graphics.Color.rgb(0xE0, 0xE0, 0xE0)
+            viewButton.onPressChanged = { pressed ->
+                if (pressed) {
+                    hud.thermal = !hud.thermal
+                    viewButton.label = if (hud.thermal) "TÉRM" else "DÍA"
+                }
+            }
+            sound.seekerCool()
+        } else {
+            fireButton.label = "FUEGO"
+            fireButton.onPressChanged = { pressed -> gun.trigger = pressed }
+
+            reloadButton.label = "RECARGA"
+            reloadButton.accent = amber
+            reloadButton.onPressChanged = { pressed -> if (pressed) gun.requestReload() }
+
+            // Phalanx: 4500 → 3000 → ráfaga 60 → ráfaga 100 · Gepard: HE ↔ AHEAD
+            modeButton.label = gun.mode.label
+            modeButton.accent = green
+            modeButton.onPressChanged = { pressed ->
+                if (pressed) modeButton.label = gun.cycleMode().label
             }
         }
 
@@ -198,6 +244,7 @@ class MainActivity : AppCompatActivity() {
                 analysis = an
                 this.camera = camera
                 applyFieldOfView(camera)
+                camera.cameraInfo.zoomState.observe(this) { z -> hud.setZoom(z.zoomRatio) }
             } catch (e: Exception) {
                 Log.e(TAG, "No se pudo iniciar la cámara", e)
                 Toast.makeText(this, "Error de cámara: ${e.message}", Toast.LENGTH_LONG).show()
@@ -220,6 +267,29 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.w(TAG, "No se pudo leer el FOV, se usa el valor por defecto", e)
         }
+    }
+
+    /** Javelin: alterna campo ancho (1x) y estrecho (hasta 3x, según la cámara). */
+    private fun toggleZoom() {
+        val cam = camera ?: return
+        val zs = cam.cameraInfo.zoomState.value
+        val maxZ = zs?.maxZoomRatio ?: 1f
+        val narrow = (zs?.zoomRatio ?: 1f) < 1.01f
+        val target = if (narrow) minOf(3f, maxZ) else 1f
+        cam.cameraControl.setZoomRatio(target)
+        reloadButton.label = if (target > 1.01f) "NFOV" else "WFOV"
+    }
+
+    /** Lanzamiento del Javelin: golpe en la mano y destello del flash. */
+    private fun onMissileLaunched() {
+        try {
+            vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 60, 260, 140), intArrayOf(0, 255, 0, 160), -1))
+        } catch (e: Exception) {
+            Log.w(TAG, "Vibración no disponible", e)
+        }
+        // destello al encenderse el motor
+        torchHandler.postDelayed({ setTorch(true, force = true) }, (JavelinSystem.EJECT_TIME * 1000).toLong())
+        torchHandler.postDelayed({ setTorch(false, force = true) }, (JavelinSystem.EJECT_TIME * 1000).toLong() + 140)
     }
 
     // ---------------- Flash LED al ritmo de la metralla ----------------
@@ -269,13 +339,20 @@ class MainActivity : AppCompatActivity() {
         val v = vibrator ?: return
         try {
             when (state) {
-                GunState.SPIN_UP -> v.vibrate(VibrationEffect.createOneShot((GunController.SPIN_UP_TIME * 1000).toLong(), 35))
+                GunState.SPIN_UP -> if (weapon == Weapon.PHALANX)
+                    v.vibrate(VibrationEffect.createOneShot((gun.cfg.spinUpTime * 1000).toLong(), 35))
                 GunState.FIRING -> {
-                    // pulso por cada 2 disparos según la cadencia
-                    val half = (60_000.0 / gun.rateRpm).toLong().coerceAtLeast(5)
-                    v.vibrate(VibrationEffect.createWaveform(longArrayOf(half, half), intArrayOf(220, 0), 0))
+                    if (weapon == Weapon.GEPARD) {
+                        // golpe fuerte por cada disparo de 35 mm
+                        val period = (60_000.0 / gun.rateRpm).toLong()
+                        v.vibrate(VibrationEffect.createWaveform(longArrayOf(period / 2, period / 2), intArrayOf(255, 0), 0))
+                    } else {
+                        // pulso por cada 2 disparos según la cadencia
+                        val half = (60_000.0 / gun.rateRpm).toLong().coerceAtLeast(5)
+                        v.vibrate(VibrationEffect.createWaveform(longArrayOf(half, half), intArrayOf(220, 0), 0))
+                    }
                 }
-                GunState.SPIN_DOWN -> v.vibrate(VibrationEffect.createOneShot(300, 60))
+                GunState.SPIN_DOWN -> if (weapon == Weapon.PHALANX) v.vibrate(VibrationEffect.createOneShot(300, 60)) else v.cancel()
                 else -> v.cancel()
             }
         } catch (e: Exception) {

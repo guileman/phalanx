@@ -15,15 +15,21 @@
         android:theme="@style/Theme.Phalanx">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".MenuActivity"
             android:exported="true"
             android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:keepScreenOn="true">
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:keepScreenOn="true" />
     </application>
 </manifest>

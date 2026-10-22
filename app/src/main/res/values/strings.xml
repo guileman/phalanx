@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Phalanx CIWS</string>
+    <string name="app_name">Phalanx AR</string>
     <string name="camera_required">Se necesita la cámara para jugar</string>
 </resources>

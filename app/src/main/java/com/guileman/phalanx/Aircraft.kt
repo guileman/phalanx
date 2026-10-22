@@ -419,7 +419,7 @@ class AircraftManager {
      * Impactos de proyectiles: segmento recorrido por la bala en este paso, relativo al avión.
      * @return cantidad de impactos
      */
-    fun checkHits(b: Ballistics, dt: Float, effects: Effects, sound: PhalanxSound?, nowNanos: Long): Int {
+    fun checkHits(b: Ballistics, dt: Float, effects: Effects, sound: PhalanxSound?, nowNanos: Long, damage: Int = 1): Int {
         if (list.isEmpty()) return 0
         var hits = 0
         for (a in list) {
@@ -439,8 +439,8 @@ class AircraftManager {
                 if (cx * cx + cy * cy + cz * cz < rr * rr) {
                     b.kill(i)
                     hits++
-                    a.hp--
-                    effects.explode(a.x + cx * 0.5f, a.y + cy * 0.5f, a.z + cz * 0.5f, 1.6f + rnd.nextFloat(), 0.45f)
+                    a.hp -= damage
+                    effects.explode(a.x + cx * 0.5f, a.y + cy * 0.5f, a.z + cz * 0.5f, (1.6f + rnd.nextFloat()) * (if (damage > 1) 1.6f else 1f), 0.45f)
                     if (nowNanos - a.lastHitSound > 120_000_000L) {
                         a.lastHitSound = nowNanos
                         sound?.explosion(a.range, 0.15f)
@@ -453,6 +453,14 @@ class AircraftManager {
             }
         }
         return hits
+    }
+
+    /** Daño por fragmentos o misil. @return true si lo derribó. */
+    fun damage(a: Aircraft, amount: Int, effects: Effects, sound: PhalanxSound?): Boolean {
+        if (a.down) return false
+        a.hp -= amount
+        if (a.hp <= 0) { shootDown(a, effects, sound); return true }
+        return false
     }
 
     private fun shootDown(a: Aircraft, effects: Effects, sound: PhalanxSound?) {

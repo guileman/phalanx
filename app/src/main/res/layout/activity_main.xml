@@ -45,4 +45,21 @@
         android:layout_gravity="bottom|start"
         android:layout_marginStart="204dp"
         android:layout_marginBottom="20dp" />
+
+    <com.guileman.phalanx.ControlButtonView
+        android:id="@+id/viewButton"
+        android:layout_width="76dp"
+        android:layout_height="76dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="292dp"
+        android:layout_marginBottom="20dp"
+        android:visibility="gone" />
+
+    <com.guileman.phalanx.ControlButtonView
+        android:id="@+id/menuButton"
+        android:layout_width="58dp"
+        android:layout_height="58dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="160dp"
+        android:layout_marginBottom="20dp" />
 </FrameLayout>

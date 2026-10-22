@@ -6,19 +6,6 @@ import kotlin.math.min
 enum class GunState { SAFE, SPIN_UP, FIRING, SPIN_DOWN, RELOADING }
 
 /**
- * Modos de fuego del Phalanx real: cadencia seleccionable 4500 / 3000 disparos/min (Block 1 / 1B)
- * y ráfagas automáticas de 60 o 100 tiros (Block 0).
- */
-enum class FireMode(val label: String, val rpm: Double, val burst: Int) {
-    CONT_4500("4500", 4500.0, 0),
-    CONT_3000("3000", 3000.0, 0),
-    BURST_60("R60", 4500.0, 60),
-    BURST_100("R100", 4500.0, 100);
-
-    fun next(): FireMode = entries[(ordinal + 1) % entries.size]
-}
-
-/**
  * Máquina de estados del cañón (fuente única de verdad, se actualiza desde el hilo de UI).
  * El motor de audio solo lee [state] y [spin], que son volátiles.
  *
@@ -29,15 +16,7 @@ enum class FireMode(val label: String, val rpm: Double, val burst: Int) {
  * Gatillo suelto ANTES de llegar a disparar -> SPIN_DOWN "abortado":
  *                  el motor frena bruscamente (0.3 s), sin descarga de aire.
  */
-class GunController {
-
-    companion object {
-        const val SPIN_UP_TIME = 0.4
-        const val SPIN_DOWN_TIME = 0.5
-        const val BRAKE_TIME = 0.3
-        const val MAGAZINE = 1550          // capacidad real del Phalanx Block 1B
-        const val RELOAD_TIME = 4.0
-    }
+class GunController(val cfg: GunConfig = GunConfig.PHALANX) {
 
     @Volatile var state: GunState = GunState.SAFE
         private set
@@ -49,14 +28,25 @@ class GunController {
     @Volatile var trigger: Boolean = false
 
     /** Modo de fuego seleccionado (se aplica al próximo disparo). */
-    @Volatile var mode: FireMode = FireMode.CONT_4500
+    @Volatile var mode: FireMode = cfg.modes.first()
+        private set
     /** Cadencia de la ráfaga en curso (la lee el audio). */
-    @Volatile var rateRpm: Double = 4500.0
+    @Volatile var rateRpm: Double = cfg.modes.first().rpm
         private set
     /** Tiros que faltan de la ráfaga automática en curso (0 = sin ráfaga). */
     var burstLeft = 0
         private set
     private var waitRelease = false
+    /** La ráfaga en curso usa munición AHEAD. */
+    var ahead = false
+        private set
+    /** Índice de la boca de fuego que dispara a continuación (cañones alternados). */
+    var nextMuzzle = 0
+
+    fun cycleMode(): FireMode {
+        mode = cfg.modes[(cfg.modes.indexOf(mode) + 1) % cfg.modes.size]
+        return mode
+    }
 
     /** true si el SPIN_DOWN actual viene de soltar el gatillo antes de disparar (freno brusco). */
     @Volatile var aborted: Boolean = false
@@ -69,7 +59,7 @@ class GunController {
         private set
     var roundsFired = 0L
         private set
-    var magazine = MAGAZINE
+    var magazine = cfg.magazine
         private set
     /** Temperatura del cañón 0..1 */
     var heat = 0f
@@ -79,7 +69,7 @@ class GunController {
     private val recentShots = ArrayDeque<Long>()
 
     val reloadProgress: Float
-        get() = if (state == GunState.RELOADING) (stateTime / RELOAD_TIME).toFloat() else 0f
+        get() = if (state == GunState.RELOADING) (stateTime / cfg.reloadTime).toFloat() else 0f
 
     /** Disparos/minuto medidos en el último segundo. */
     fun measuredRpm(nowNanos: Long): Int {
@@ -90,7 +80,7 @@ class GunController {
     }
 
     fun requestReload(): Boolean {
-        if (state == GunState.SAFE && magazine < MAGAZINE) {
+        if (state == GunState.SAFE && magazine < cfg.magazine) {
             setState(GunState.RELOADING)
             return true
         }
@@ -108,16 +98,13 @@ class GunController {
         stateTime = 0.0
     }
 
-    /**
-     * Avanza la simulación [dt] segundos.
-     * @return cantidad de proyectiles que hay que disparar en este paso.
-     */
     /** Gatillo apretado de nuevo (no el mismo toque que terminó la ráfaga anterior). */
     private fun freshPress() = trigger && !waitRelease && magazine > 0
 
     private fun startSpinUp() {
         val m = mode
         rateRpm = m.rpm
+        ahead = m.ahead
         burstLeft = if (m.burst > 0) min(m.burst, magazine) else 0
         setState(GunState.SPIN_UP)
     }
@@ -125,6 +112,10 @@ class GunController {
     /** En ráfaga automática la computadora completa la ráfaga aunque se suelte el botón. */
     private fun firing() = (trigger && !waitRelease) || burstLeft > 0
 
+    /**
+     * Avanza la simulación [dt] segundos.
+     * @return cantidad de proyectiles que hay que disparar en este paso.
+     */
     fun update(dt: Double, nowNanos: Long): Int {
         stateTime += dt
         if (!trigger) waitRelease = false
@@ -135,7 +126,7 @@ class GunController {
                 if (freshPress()) startSpinUp()
             }
             GunState.SPIN_UP -> {
-                spin = min(1f, spin + (dt / SPIN_UP_TIME).toFloat())
+                spin = min(1f, spin + (dt / cfg.spinUpTime).toFloat())
                 if (!firing()) {
                     beginSpinDown(abort = true)
                 } else if (spin >= 1f) {
@@ -163,12 +154,12 @@ class GunController {
                     if (waitRelease) shotAccumulator = 0.0
                     magazine -= shots
                     roundsFired += shots
-                    heat = min(1f, heat + shots * 0.0009f)
+                    heat = min(1f, heat + shots * cfg.heatPerShot)
                     repeat(shots) { recentShots.addLast(nowNanos) }
                 }
             }
             GunState.SPIN_DOWN -> {
-                val dur = if (aborted) BRAKE_TIME else SPIN_DOWN_TIME
+                val dur = if (aborted) cfg.brakeTime else cfg.spinDownTime
                 val k = (1.0 - stateTime / dur).coerceIn(0.0, 1.0).toFloat()
                 // freno: caída rápida al principio (cuadrática); normal: lineal
                 spin = spinAtRelease * if (aborted) k * k else k
@@ -182,8 +173,8 @@ class GunController {
             }
             GunState.RELOADING -> {
                 spin = 0f
-                if (stateTime >= RELOAD_TIME) {
-                    magazine = MAGAZINE
+                if (stateTime >= cfg.reloadTime) {
+                    magazine = cfg.magazine
                     setState(GunState.SAFE)
                 }
             }
