@@ -64,8 +64,10 @@ class JavelinSystem {
         const val EJECT_SPEED = 28f
         const val ACCEL = 260f
         const val MAX_SPEED = 320f
+        /** Ficción: contra aviones vuela más rápido para poder alcanzarlos. */
+        const val AIR_MAX_SPEED = 420f
         const val BURN_TIME = 4f
-        const val MAX_TURN = 5f        // rad/s
+        const val MAX_TURN = 8f        // rad/s
         const val MAX_FLIGHT = 12f
         /** Salida del tubo en coordenadas del dispositivo. */
         val MUZZLE = floatArrayOf(0.15f, -0.12f, -0.6f)
@@ -79,6 +81,8 @@ class JavelinSystem {
         var ignited = false
         var hd0 = 0f
         var apex = 0f
+        /** Velocidad máxima: a corta distancia vuela más lento para poder doblar hacia el blanco. */
+        var vmax = MAX_SPEED
         var smokeTimer = 0f
         var alive = true
         val last = FloatArray(3)
@@ -203,6 +207,8 @@ class JavelinSystem {
         m.hd0 = sqrt((m.last[0] - x) * (m.last[0] - x) + (m.last[1] - y) * (m.last[1] - y)).coerceAtLeast(1f)
         // TOP: trepa y cae desde arriba (hasta 150 m); DIR: trayectoria baja
         m.apex = if (m.top) (m.hd0 * 0.6f).coerceIn(12f, 150f) else (m.hd0 * 0.06f).coerceIn(1f, 50f)
+        val d0 = sqrt(m.hd0 * m.hd0 + (m.last[2] - z) * (m.last[2] - z))
+        m.vmax = if (tgt is AirTarget) AIR_MAX_SPEED else (d0 * 1.2f).coerceIn(60f, MAX_SPEED)
         missiles += m
         launches++
         // lanzamiento suave: poca nube en el tubo
@@ -232,7 +238,13 @@ class JavelinSystem {
             if (m.target.valid) m.target.velocity(tv) else { tv[0] = 0f; tv[1] = 0f; tv[2] = 0f }
             val dx = m.last[0] - m.x; val dy = m.last[1] - m.y; val dz = m.last[2] - m.z
             val dist = sqrt(dx * dx + dy * dy + dz * dz)
-            val tgo = dist / max(sp, 80f)
+            // punto de intercepción (iterado con la velocidad media esperada)
+            val vAvg = 0.5f * (sp + m.vmax)
+            var tgo = dist / vAvg
+            repeat(3) {
+                t[0] = m.last[0] + tv[0] * tgo; t[1] = m.last[1] + tv[1] * tgo; t[2] = m.last[2] + tv[2] * tgo
+                tgo = sqrt((t[0] - m.x) * (t[0] - m.x) + (t[1] - m.y) * (t[1] - m.y) + (t[2] - m.z) * (t[2] - m.z)) / vAvg
+            }
             t[0] = m.last[0] + tv[0] * tgo; t[1] = m.last[1] + tv[1] * tgo; t[2] = m.last[2] + tv[2] * tgo
             val hd = sqrt((t[0] - m.x) * (t[0] - m.x) + (t[1] - m.y) * (t[1] - m.y))
             val h = m.apex * ((hd - 0.18f * m.hd0) / (0.45f * m.hd0)).coerceIn(0f, 1f)
@@ -250,7 +262,7 @@ class JavelinSystem {
                 val cl = sqrt(cx * cx + cy * cy + cz * cz)
                 cx /= cl; cy /= cl; cz /= cl
             }
-            val newSp = if (m.burning) min(MAX_SPEED, sp + ACCEL * dt) else sp * (1f - 0.08f * dt)
+            val newSp = if (m.burning) min(m.vmax, sp + ACCEL * dt) else sp * (1f - 0.08f * dt)
             m.vx = cx * newSp; m.vy = cy * newSp; m.vz = cz * newSp
 
             // estela de humo del motor

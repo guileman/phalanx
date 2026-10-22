@@ -1,11 +1,41 @@
-# Phalanx CIWS — simulador manual en primera persona (Android)
+# Phalanx AR — simulador de sistemas de armas en realidad aumentada (Android)
 
-Juego de realidad aumentada: la cámara del celular es la mira de un sistema tipo **Phalanx CIWS** operado a mano.
-Encima de la imagen en vivo se dibuja un HUD estilo avión, se detectan personas/autos/etc. con un recuadro y los
-proyectiles quedan **fijos respecto del entorno**: si movés el celular mientras disparás, la "manguera" de trazadoras se curva
-como en la realidad.
+La cámara del celular es la mira de un sistema de armas real, operado a mano y en primera persona (con algo de ficción).
+Encima de la imagen en vivo se dibuja un HUD, se detectan personas/autos/etc. con un recuadro y todo lo virtual
+(proyectiles, misiles, aviones, explosiones) queda **fijo respecto del entorno**: si movés el celular, la trayectoria
+se ve como en la realidad.
 
-## Cómo se juega
+## Menú de inicio
+
+Al abrir la app se elige el sistema (las ilustraciones son renders propios, `tools/render_weapons.py`):
+
+| Sistema | Real | Ficción |
+|---|---|---|
+| **Phalanx CIWS** | Cañón rotativo M61A1 de 20 mm, defensa automática de buques | Se apunta y dispara a mano |
+| **Gepard 35 mm** | Blindado antiaéreo con dos cañones Oerlikon de 35 mm (550/min cada uno) | Apuntado manual y munición AHEAD (la del Skynex) |
+| **Javelin** | Misil antitanque "dispara y olvida" con unidad de comando (CLU) y visor térmico | También fija aviones |
+
+El botón **MENÚ** (o atrás) vuelve a la selección.
+
+### Gepard 35 mm
+- Dos cañones que se **alternan** (1100 disparos/min en total), trazadoras gruesas saliendo de ambos lados.
+- **MUNICIÓN**: **HE** (contacto, más daño por impacto) o **AHEAD**: el telémetro mide el avión más cercano a la mira
+  (al punto de intercepción) o el objeto bloqueado, y la espoleta se programa a esa distancia; el proyectil estalla
+  y larga un cono de fragmentos (~10°, ~40 m) que daña lo que tenga adelante.
+- Panel con munición por cañón (IZQ/DER), telémetro y distancia de espoleta; mira con arco de distancia.
+- Estampido grave de 35 mm + golpe del cerrojo; vibración fuerte por disparo.
+
+### Javelin
+1. **Enfriamiento del buscador** (2,5 s, con siseo).
+2. Mantener el blanco (objeto detectado o avión) dentro de la **ventana de seguimiento** ~1,4 s, con pitidos cada vez
+   más rápidos → **FIJADO** (tono continuo y cruz de borde a borde).
+3. **LANZAR**: lanzamiento suave (el misil sale despacio del tubo), a los 0,3 s se enciende el motor (rugido, destello
+   del flash) y vuela solo con estela de humo. **TOP**: trepa y cae sobre el blanco desde arriba; **DIR**: trayectoria baja.
+   A corta distancia vuela más lento para poder doblar. Contra aviones calcula la intercepción.
+4. Recarga de tubo (4 s) y 6 misiles; al quedarse sin misiles llega un reabastecimiento.
+- **WFOV/NFOV**: zoom real de la cámara (hasta 3x); **DÍA/TÉRM**: visor térmico simulado (monocromo de alto contraste).
+
+## Phalanx: cómo se juega
 
 | Control | Acción |
 |---|---|
@@ -14,7 +44,7 @@ como en la realidad.
 | Soltar antes de llegar a disparar | El rotor frena bruscamente (sin descarga de aire) |
 | Botón **MODO** | Cicla 4500/min → 3000/min → ráfaga 60 → ráfaga 100 (en ráfaga, un toque dispara la ráfaga completa) |
 | Botón **RECARGA** | Recarga el cargador de 1550 tiros (4 s) |
-| Botón **AVIONES** (interruptor) | Activa los contactos aéreos |
+| Botón **AVIONES** (interruptor) | Activa los contactos aéreos (en los tres sistemas) |
 | Teclas de volumen | Volumen del juego |
 
 ### Sonido (basado en el Phalanx real)
@@ -67,6 +97,9 @@ Un proyectil cuenta como **impacto** cuando llega a la distancia estimada del bl
 | `TargetDetector.kt` | MediaPipe Object Detector (EfficientDet‑Lite0, COCO) sobre cada cuadro de CameraX. |
 | `Aircraft.kt` | Modelos 3D, vuelo, impactos (segmento de la bala contra la esfera del avión), derribo y dibujo con perspectiva. |
 | `Effects.kt` | Explosiones y humo con sprites, anclados al mundo y escalados por distancia. |
+| `MenuActivity.kt` | Menú de inicio con las tarjetas de cada sistema. |
+| `Weapon.kt` | Sistemas y configuración de cada cañón (cadencias, cargador, velocidad, bocas de fuego, modos). |
+| `Javelin.kt` | Buscador, fijación, misiles, guiado (perfil TOP/DIR e intercepción) y espoleta. |
 | `HudView.kt` | Game loop + dibujo. Las detecciones se anclan a una dirección del mundo usando la orientación *al momento de la captura*, así los recuadros siguen al objeto aunque gires el celular entre detecciones. |
 
 ## Compilar
