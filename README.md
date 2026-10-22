@@ -5,6 +5,14 @@ Encima de la imagen en vivo se dibuja un HUD, se detectan personas/autos/etc. co
 (proyectiles, misiles, aviones, explosiones) queda **fijo respecto del entorno**: si movés el celular, la trayectoria
 se ve como en la realidad.
 
+## Capturas y ayuda
+
+| Phalanx | Javelin |
+|---|---|
+| ![Phalanx](docs/capturas/phalanx-amenaza-entrante.jpg) | ![Javelin](docs/capturas/javelin-fijado-termico.jpg) |
+
+👉 **[Guía de ayuda: cómo leer la pantalla](docs/AYUDA.md)** — todas las capturas explicadas y preguntas frecuentes.
+
 ## Menú de inicio
 
 Al abrir la app se elige el sistema (las ilustraciones son renders propios, `tools/render_weapons.py`):
