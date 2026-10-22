@@ -2,7 +2,7 @@
 
 La cámara del celular es la mira de un sistema de armas real, operado a mano y en primera persona (con algo de ficción).
 Encima de la imagen en vivo se dibuja un HUD, se detectan personas/autos/etc. con un recuadro y todo lo virtual
-(proyectiles, misiles, aviones, explosiones) queda **fijo respecto del entorno**: si movés el celular, la trayectoria
+(proyectiles, misiles, aviones, carros, explosiones) queda **fijo respecto del entorno**: si movés el celular, la trayectoria
 se ve como en la realidad.
 
 ## Capturas y ayuda
@@ -22,6 +22,8 @@ Al abrir la app se elige el sistema tocando su tarjeta (las ilustraciones son re
 | **Phalanx CIWS** | Cañón rotativo M61A1 de 20 mm, defensa automática de buques | Se apunta y dispara a mano |
 | **Gepard 35 mm** | Blindado antiaéreo con dos cañones Oerlikon de 35 mm (550/min cada uno) | Apuntado manual y munición AHEAD (la del Skynex) |
 | **Javelin** | Misil antitanque "dispara y olvida" con unidad de comando (CLU) y visor térmico | También fija aviones |
+| **TAM 105 mm** | Tanque Argentino Mediano: cañón de 105 mm, telémetro láser y computadora de tiro | Se apunta con el celular |
+| **Obús CITER 155** | Obús remolcado argentino de 155 mm para tiro indirecto | Cargas escaladas (blancos a 1–3,5 km), dron observador |
 
 El botón **MENÚ** (o atrás) vuelve a la selección.
 
@@ -42,6 +44,28 @@ El botón **MENÚ** (o atrás) vuelve a la selección.
    A corta distancia vuela más lento para poder doblar. Contra aviones calcula la intercepción.
 4. Recarga de tubo (4 s) y 6 misiles; al quedarse sin misiles llega un reabastecimiento.
 - **WFOV/NFOV**: zoom real de la cámara (hasta 3x); **DÍA/TÉRM**: visor térmico simulado (monocromo de alto contraste).
+
+### TAM 105 mm
+1. **LÁSER**: mide la distancia a lo que está en el centro de la mira (vehículo, avión, objeto detectado o el suelo).
+   Si es un vehículo, la computadora lo **sigue** mientras siga cerca de la mira.
+2. **FUEGO**: la computadora de tiro agrega la **elevación** por la caída del proyectil y el **adelanto** si el blanco
+   se mueve. Sin medir, el disparo sale derecho por la mira y a distancia cae corto.
+3. **Munición**: **APFSDS** (flecha perforante, 1450 m/s, destruye un carro de un tiro) o **HE** (explosiva, 730 m/s,
+   cae más y daña en un radio de 9 m). Cambiar de munición obliga a recargar.
+4. Recarga de 5 s con sonido del cierre de recámara; estampido, fogonazo y nube de humo en la boca; **WFOV/NFOV** de zoom.
+- La simulación de la computadora pasa a menos de 0,5 m del blanco a 800–2000 m, quieto o en movimiento.
+
+### Obús CITER 155 mm
+- **Apuntar**: el rumbo del celular es el azimut y la inclinación es la elevación del tubo (en grados y milésimas).
+- **CARGA 1–5**: velocidad de salida (110–230 m/s, escalada para el juego). Con elevación y carga se cubre de 0,4 a 4 km,
+  con 5 a 38 s de vuelo.
+- La pieza calcula todo el tiempo dónde va a caer: **trayectoria punteada** y **círculo de impacto** dibujados sobre el
+  terreno real, más alcance y tiempo de vuelo en el panel.
+- **CORRECCIÓN**: respecto del carro más cercano al impacto previsto indica cuántos metros CORTO/LARGO e IZQ/DER.
+- **MAPA / DRON**: mapa de tiro visto desde arriba (blancos, línea de tiro, proyectiles en vuelo, impactos) o la
+  imagen de un **dron observador** sobre el blanco, para ver el impacto aunque esté a kilómetros.
+- Cuenta regresiva hasta el impacto y aviso **¡SPLASH!** 5 s antes. Daño en área de 22 m.
+- Los carros arrancan activados, a 1–3,5 km y casi quietos, en todo el frente.
 
 ## Phalanx: cómo se juega
 
@@ -114,6 +138,7 @@ Un proyectil cuenta como **impacto** cuando llega a la distancia estimada del bl
 | `Effects.kt` | Explosiones y humo con sprites, anclados al mundo y escalados por distancia. |
 | `MenuActivity.kt` | Menú de inicio con las tarjetas de cada sistema. |
 | `Weapon.kt` | Sistemas y configuración de cada cañón (cadencias, cargador, velocidad, bocas de fuego, modos). |
+| `Cannon.kt` | TAM y obús: municiones, recarga y cargas. |
 | `Javelin.kt` | Buscador, fijación, misiles, guiado (perfil TOP/DIR e intercepción) y espoleta. |
 | `HudView.kt` | Game loop + dibujo. Las detecciones se anclan a una dirección del mundo usando la orientación *al momento de la captura*, así los recuadros siguen al objeto aunque gires el celular entre detecciones. |
 

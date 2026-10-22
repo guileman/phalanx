@@ -58,6 +58,22 @@ aceleran mientras fija y pasan a un tono continuo cuando queda **FIJADO**.
 
 ---
 
+## TAM 105 mm — cómo tirar
+
+1. Poné el chevrón (Λ) sobre el blanco y tocá **LÁSER**: abajo de la mira aparece la distancia y en el panel el eco
+   (vehículo, objeto o SUELO).
+2. Si el eco es un vehículo, la computadora lo sigue: mantenelo cerca de la mira.
+3. Tocá **FUEGO** cuando diga **● LISTO**. CORR.ELEV y ADELANTO muestran lo que corrigió la computadora (en milésimas).
+4. **APFSDS** para carros (un tiro), **HE** para todo lo demás (explota y daña alrededor).
+
+## Obús CITER 155 mm — cómo tirar
+
+1. Girá hasta que la línea de tiro del **MAPA** pase por un carro (cuadrado rojo).
+2. Inclinando el celular subís o bajás el tubo, y con **CARGA** cambiás la potencia, hasta que **CORRECCIÓN** diga
+   **¡EN BLANCO!** (o quede a menos de 25 m).
+3. **FUEGO**, y mirá el impacto en el **DRON** o, si está a la vista, en la cámara con la marca de impacto sobre el
+   terreno. Corregí y volvé a tirar.
+
 ## Preguntas frecuentes
 
 - **¿Por qué no aparecen aviones o carros?** Encendé **AVIONES** o **CARROS**. El primero aparece a los 2 s y después
